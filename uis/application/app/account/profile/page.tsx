@@ -24,6 +24,8 @@ export default function ProfilePage() {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [profileRetry, setProfileRetry] = useState(0);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -33,15 +35,20 @@ export default function ProfilePage() {
   }
 
   useEffect(() => {
-    const token = localStorage.getItem("brasaland_token");
-
-    if (!token) {
-      router.replace("/login");
-      return;
-    }
+    let active = true;
 
     async function loadProfile() {
+      setLoading(true);
+      setLoadError("");
+
       try {
+        const token = localStorage.getItem("brasaland_token");
+
+        if (!token) {
+          router.replace("/login");
+          return;
+        }
+
         const response = await fetch("/auth/me", {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -56,26 +63,32 @@ export default function ProfilePage() {
         }
 
         if (!response.ok) {
-          throw new Error("No se pudo cargar el perfil.");
+          throw new Error("profile-load-failed");
         }
 
         const user: CurrentUser = await response.json();
 
-        setEmail(user.email);
-        setName(user.profile?.name ?? "");
-        setPhone(user.profile?.phone ?? "");
-        setAddress(user.profile?.address ?? "");
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Error de conexión"
-        );
+        if (active) {
+          setEmail(user.email ?? "");
+          setName(user.profile?.name ?? "");
+          setPhone(user.profile?.phone ?? "");
+          setAddress(user.profile?.address ?? "");
+        }
+      } catch {
+        if (active) {
+          setLoadError("No se pudo cargar el perfil. Comprueba tu conexión e inténtalo de nuevo.");
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
 
-    loadProfile();
-  }, [router]);
+    void loadProfile();
+
+    return () => {
+      active = false;
+    };
+  }, [router, profileRetry]);
 
   async function handleSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -114,10 +127,8 @@ export default function ProfilePage() {
       }
 
       setSuccess("Perfil actualizado correctamente.");
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error al guardar"
-      );
+    } catch {
+      setError("No se pudo guardar el perfil. Inténtalo de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -125,6 +136,22 @@ export default function ProfilePage() {
 
   if (loading) {
     return <main><p>Cargando perfil...</p></main>;
+  }
+
+  if (loadError) {
+    return (
+      <main style={{ maxWidth: 500, margin: "60px auto", padding: 24 }}>
+        <h1>Mi perfil - Brasaland</h1>
+        <p role="alert" style={{ color: "red" }}>{loadError}</p>
+        <button
+          type="button"
+          onClick={() => setProfileRetry((current) => current + 1)}
+        >
+          Reintentar
+        </button>{" "}
+        <a href="/login">Ir al inicio de sesión</a>
+      </main>
+    );
   }
 
   return (

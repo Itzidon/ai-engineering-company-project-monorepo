@@ -12,19 +12,24 @@ export default function SuppliersLayout({
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let active = true;
 
     async function checkAuth() {
-      const token = localStorage.getItem("brasaland_token");
-
-      if (!token) {
-        router.replace("/login");
-        return;
-      }
+      setChecking(true);
+      setError("");
 
       try {
+        const token = localStorage.getItem("brasaland_token");
+
+        if (!token) {
+          router.replace("/login");
+          return;
+        }
+
         const response = await fetch("/auth/me", {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -39,14 +44,16 @@ export default function SuppliersLayout({
         }
 
         if (!response.ok) {
-          throw new Error("No se pudo verificar la sesión.");
+          throw new Error("session-check-failed");
         }
 
         if (active) setAuthorized(true);
       } catch {
         if (active) {
-          setError("Error al comprobar la sesión. Inténtalo de nuevo.");
+          setError("No se pudo comprobar la sesión. Inténtalo de nuevo o inicia sesión.");
         }
+      } finally {
+        if (active) setChecking(false);
       }
     }
 
@@ -55,14 +62,26 @@ export default function SuppliersLayout({
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [router, retryCount]);
+
+  if (checking) {
+    return <main>Comprobando sesión...</main>;
+  }
 
   if (error) {
-    return <main role="alert">{error}</main>;
+    return (
+      <main>
+        <p role="alert">{error}</p>
+        <button type="button" onClick={() => setRetryCount((count) => count + 1)}>
+          Reintentar
+        </button>{" "}
+        <a href="/login">Ir al inicio de sesión</a>
+      </main>
+    );
   }
 
   if (!authorized) {
-    return <main>Comprobando sesión...</main>;
+    return <main>Redirigiendo al inicio de sesión...</main>;
   }
 
   return <>{children}</>;

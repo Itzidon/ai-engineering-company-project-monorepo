@@ -1,3 +1,5 @@
+import sys
+
 from services.api import database
 from services.api.models import SupplierCreate
 
@@ -163,15 +165,34 @@ def seed() -> tuple[int, int]:
     return inserted, skipped
 
 
-def main() -> None:
-    inserted, skipped = seed()
-    total = len(database.list_suppliers())
-    print(
-        f"Seed completed: {inserted} inserted, {skipped} already present. "
-        f"Total suppliers: {total} ({database.get_db_path()})"
-    )
-    database.close_db()
+def main() -> int:
+    exit_code = 0
+
+    try:
+        inserted, skipped = seed()
+        total = len(database.list_suppliers())
+        print(
+            f"Seed completed: {inserted} inserted, {skipped} already present. "
+            f"Total suppliers: {total}"
+        )
+    except (OSError, ValueError, KeyError):
+        print(
+            "No se pudo cargar el seed de proveedores.",
+            file=sys.stderr,
+        )
+        exit_code = 1
+    finally:
+        try:
+            database.close_db()
+        except OSError:
+            print(
+                "No se pudo cerrar el almacenamiento de proveedores.",
+                file=sys.stderr,
+            )
+            exit_code = 1
+
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
