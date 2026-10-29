@@ -1,26 +1,43 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 import os
 import secrets
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.testclient import TestClient
 from jose import jwt
+from pydantic import ValidationError
 from resend.exceptions import ResendError
+from tinydb.table import Table
 
 from services.api.main import app
 from services.api.auth import storage
 from services.api.auth import password_reset
-from services.api.auth.security import create_access_token
+from services.api.auth.bootstrap_admin import bootstrap_first_admin
+from services.api.auth.models import UserCreate
+from services.api.auth.security import (
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
+from services.api.routes import auth as auth_routes
+from services.api.routes import users as user_routes
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def auth_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTH_DB_PATH", str(tmp_path / "auth.json"))
     monkeypatch.setenv("SUPPLIERS_DB_PATH", str(tmp_path / "suppliers.json"))
     monkeypatch.setenv("JWT_SECRET_KEY", secrets.token_urlsafe(48))
     monkeypatch.setenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 
+
+@pytest.fixture
+def client(auth_environment):
     with TestClient(app) as c:
         yield c
 
@@ -358,3 +375,189 @@ def test_token_configuration_fails_closed(client, monkeypatch):
     monkeypatch.delenv("JWT_SECRET_KEY")
     with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
         create_access_token(1)
+
+
+@pytest.fixture
+def business_user(auth_environment):
+    return user_routes.create_user(UserCreate(
+        email="ana@example.com", password="ClaveSegura123!", name="Ana",
+    ))
+
+
+def test_business_registration_normalizes_hashes_and_rejects_duplicate(auth_environment):
+    user = user_routes.create_user(UserCreate(
+        email=" ANA@example.com ", password="ClaveSegura123!", name="Ana",
+    ))
+    assert user["email"] == "ana@example.com"
+    assert user["role"] == "user"
+    assert verify_password("ClaveSegura123!", user["hashed_password"])
+    assert user["hashed_password"] != "ClaveSegura123!"
+    profile = storage.get_profile_by_user_id(user["id"])
+    assert profile["name"] == "Ana"
+    assert profile["user_id"] == user["id"]
+    with pytest.raises(ValueError, match="already registered"):
+        storage.create_user(" ANA@EXAMPLE.COM ", user["hashed_password"])
+    assert storage.list_users() == [user]
+    assert storage.get_profile_by_user_id(user["id"]) == profile
+
+
+@pytest.mark.parametrize("overrides", [
+    {"email": "invalid"}, {"email": ""}, {
+        "password": "1234567"}, {"password": ""},
+])
+def test_business_invalid_registration_never_persists(auth_environment, overrides):
+    payload = {"email": "ana@example.com", "password": "12345678", **overrides}
+    with pytest.raises(ValidationError):
+        user_routes.create_user(UserCreate(**payload))
+    assert storage.list_users() == []
+    with storage.open_db() as db:
+        assert db.table("profiles").all() == []
+
+
+def test_business_registration_rolls_back_if_profile_creation_fails(auth_environment):
+    original_insert = Table.insert
+
+    def insert_or_fail(table, document):
+        if table.name == "profiles":
+            raise OSError("SIMULATED_PROFILE_WRITE_FAILURE")
+        return original_insert(table, document)
+
+    with patch.object(Table, "insert", autospec=True, side_effect=insert_or_fail):
+        with pytest.raises(OSError, match="SIMULATED_PROFILE_WRITE_FAILURE"):
+            storage.create_user("ana@example.com", hash_password("12345678"))
+    assert storage.list_users() == []
+    assert storage.get_profile_by_user_id(1) is None
+
+
+def test_business_hashing_uses_salt_and_rejects_wrong_password():
+    first = hash_password("ClaveSegura123!")
+    second = hash_password("ClaveSegura123!")
+    assert first != second
+    assert verify_password("ClaveSegura123!", first)
+    assert verify_password("ClaveSegura123!", second)
+    assert not verify_password("incorrect", first)
+
+
+def test_business_login_issues_identity_without_mutating_user(business_user):
+    result = auth_routes.login(OAuth2PasswordRequestForm(
+        username=" ANA@EXAMPLE.COM ", password="ClaveSegura123!",
+    ))
+    claims = jwt.decode(result["access_token"], os.environ["JWT_SECRET_KEY"],
+                        algorithms=["HS256"])
+    assert result["token_type"] == "bearer"
+    assert claims["sub"] == str(business_user["id"])
+    assert claims["exp"] > datetime.now(timezone.utc).timestamp()
+    assert get_current_user(result["access_token"]) == business_user
+    assert storage.get_user_by_id(business_user["id"]) == business_user
+
+
+@pytest.mark.parametrize("scenario", ["unknown", "wrong_password", "inactive"])
+def test_business_failed_login_never_issues_token(business_user, scenario):
+    if scenario == "inactive":
+        storage.update_user(business_user["id"], {"is_active": False})
+    before = storage.list_users()
+    form = OAuth2PasswordRequestForm(
+        username="unknown@example.com" if scenario == "unknown" else business_user["email"],
+        password="wrong" if scenario == "wrong_password" else "ClaveSegura123!",
+    )
+    with patch.object(auth_routes, "create_access_token", wraps=create_access_token) as issue:
+        with pytest.raises(HTTPException, match="Credenciales incorrectas"):
+            auth_routes.login(form)
+        issue.assert_not_called()
+    assert storage.list_users() == before
+
+
+@pytest.mark.parametrize("scenario", ["inactive", "deleted"])
+def test_business_revoked_identity_rejects_existing_jwt(business_user, scenario):
+    token = create_access_token(business_user["id"])
+    assert get_current_user(token) == business_user
+    if scenario == "inactive":
+        storage.update_user(business_user["id"], {"is_active": False})
+    else:
+        storage.delete_user(business_user["id"])
+    with pytest.raises(HTTPException, match="Token invalido o expirado"):
+        get_current_user(token)
+
+
+@pytest.mark.parametrize("microseconds,accepted", [(-1, True), (0, False), (1, False)])
+def test_business_reset_exact_expiry_boundary(business_user, microseconds, accepted):
+    start = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
+    with patch.object(password_reset, "datetime", wraps=datetime) as clock:
+        clock.now.return_value = start
+        token = password_reset.create_reset_token(business_user["id"])
+        clock.now.return_value = start + timedelta(
+            minutes=password_reset.TOKEN_EXPIRY_MINUTES, microseconds=microseconds,
+        )
+        assert password_reset.reset_user_password(
+            token, "NuevaClave123!") is accepted
+    stored = storage.get_user_by_id(business_user["id"])
+    assert verify_password(
+        "NuevaClave123!", stored["hashed_password"]) is accepted
+    assert verify_password(
+        "ClaveSegura123!", stored["hashed_password"]) is not accepted
+    with storage.open_db() as db:
+        assert db.table("password_reset_tokens").all() == []
+
+
+def test_business_reset_replacement_is_hashed_single_use_and_account_scoped(business_user):
+    other = user_routes.create_user(UserCreate(
+        email="bob@example.com", password="OtraClave123!",
+    ))
+    other_token = password_reset.create_reset_token(other["id"])
+    previous = password_reset.create_reset_token(business_user["id"])
+    current = password_reset.create_reset_token(business_user["id"])
+    with storage.open_db() as db:
+        records = db.table("password_reset_tokens").all()
+    assert len(records) == 2
+    assert {record["token_hash"] for record in records} == {
+        hashlib.sha256(token.encode()).hexdigest() for token in (other_token, current)
+    }
+    assert not password_reset.reset_user_password(previous, "Unauthorized123!")
+    assert storage.get_user_by_id(business_user["id"]) == business_user
+    assert password_reset.reset_user_password(current, "NuevaClave123!")
+    assert not password_reset.reset_user_password(current, "Unauthorized123!")
+    assert verify_password("NuevaClave123!", storage.get_user_by_id(
+        business_user["id"])["hashed_password"])
+    assert storage.get_user_by_id(other["id"]) == other
+    assert password_reset.reset_user_password(other_token, "NuevaBob123!")
+    assert verify_password("NuevaBob123!", storage.get_user_by_id(
+        other["id"])["hashed_password"])
+
+
+def test_business_change_password_rejects_wrong_secret_before_mutation(business_user):
+    with pytest.raises(HTTPException, match="contrasena actual es incorrecta"):
+        auth_routes.change_password(auth_routes.ChangePasswordRequest(
+            current_password="incorrect", new_password="12345678",
+        ), current_user=business_user)
+    assert storage.get_user_by_id(business_user["id"]) == business_user
+    auth_routes.change_password(auth_routes.ChangePasswordRequest(
+        current_password="ClaveSegura123!", new_password="12345678",
+    ), current_user=business_user)
+    stored = storage.get_user_by_id(business_user["id"])
+    assert verify_password("12345678", stored["hashed_password"])
+    assert not verify_password("ClaveSegura123!", stored["hashed_password"])
+
+
+def test_business_bootstrap_promotes_only_one_existing_account(business_user):
+    admin = bootstrap_first_admin(" ANA@EXAMPLE.COM ", "ClaveSegura123!")
+    assert admin == {"id": business_user["id"],
+                     "email": "ana@example.com", "role": "admin"}
+    stored = storage.get_user_by_id(business_user["id"])
+    assert stored == {**business_user, "role": "admin"}
+    with pytest.raises(ValueError, match="Ya existe un administrador"):
+        bootstrap_first_admin("ana@example.com", "ClaveSegura123!")
+    assert storage.list_users() == [stored]
+
+
+@pytest.mark.parametrize("scenario", ["unknown", "wrong_password", "inactive"])
+def test_business_bootstrap_rejects_bad_credentials_without_promoting(business_user, scenario):
+    if scenario == "inactive":
+        storage.update_user(business_user["id"], {"is_active": False})
+    before = storage.list_users()
+    with pytest.raises(ValueError):
+        bootstrap_first_admin(
+            "unknown@example.com" if scenario == "unknown" else "ana@example.com",
+            "wrong" if scenario == "wrong_password" else "ClaveSegura123!",
+        )
+    assert storage.list_users() == before
+    assert all(user["role"] == "user" for user in storage.list_users())

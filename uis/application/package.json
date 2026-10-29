@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
     "test:e2e": "playwright test tests/suppliers.spec.ts --workers=1 --reporter=list"
   },
   "dependencies": {
@@ -16,11 +18,13 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "jest": "^30.5.2",
     "typescript": "^5"
   }
 }

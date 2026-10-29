@@ -8,6 +8,7 @@ __pycache__/
 coverage.json
 coverage.xml
 htmlcov/
+coverage/
 services/api/data/
 node_modules/
 .next/

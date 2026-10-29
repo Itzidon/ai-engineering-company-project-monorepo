@@ -8,8 +8,10 @@ Rama del hito: `feature/auth-088-bullet-proof-testing`.
 
 Este hito cubre los requisitos obligatorios indicados: plan de pruebas,
 autenticacion con pytest, casos felices, limite y fallo por endpoint, cobertura
-minima del 70 % y ejecucion verificable. No incluye actividades extra, cambios
-de frontend, funcionalidades nuevas, fusiones ni eliminacion de codigo previo.
+minima del 70 % y ejecucion verificable. La revision incorpora Jest para las
+utilidades TypeScript existentes y pruebas directas de negocio Python.
+No incluye actividades extra, cambios funcionales de frontend, funcionalidades
+nuevas, fusiones ni eliminacion de codigo previo.
 El enunciado completo de la academia no esta incluido en este repositorio;
 el alcance verificable es el solicitado para este hito.
 
@@ -18,6 +20,12 @@ el alcance verificable es el solicitado para este hito.
 - Pruebas de integracion HTTP mediante FastAPI `TestClient`, usando rutas,
   validadores, JWT, hashing y persistencia reales.
 - Pruebas focalizadas de configuracion de tokens y envio de recuperacion.
+- 22 pruebas directas de negocio seleccionables con `-k business`: no crean
+  `TestClient`, no envian HTTP ni sustituyen almacenamiento, hashing o JWT
+  reales por mocks. Comparten solo el entorno temporal de autenticacion.
+- Jest en Node para las nueve funciones exportadas por los clientes TypeScript
+  existentes; `fetch`, almacenamiento del navegador y redireccion simulados.
+  Se prueban resultados, entradas, filtros, sesion y errores, no componentes.
 - Bases TinyDB temporales por prueba mediante `tmp_path` y `monkeypatch`.
   Nunca se necesita borrar ni reutilizar una base de desarrollo.
 - Claves JWT aleatorias de prueba; no se requieren secretos reales.
@@ -72,7 +80,73 @@ son endpoints de negocio.
 | [test_incidents.py](services/api/tests/test_incidents.py) | Incidencias, resumen, transiciones y respuestas seguras               |
 
 Se conservan las pruebas anteriores de seed, bootstrap y errores seguros.
-No se han creado suites paralelas ni reemplazado los escenarios anteriores.
+Las pruebas Python directas se anaden a la suite existente de autenticacion.
+Las dos suites Jest nuevas no sustituyen pytest ni las pruebas Playwright;
+`testMatch` impide que Jest intente ejecutar los escenarios Playwright.
+
+- [suppliers-api.test.ts](uis/application/tests/suppliers-api.test.ts): cuatro
+  funciones de proveedores, sesion y errores.
+- [incidents-api.test.ts](uis/application/tests/incidents-api.test.ts): cinco
+  funciones de incidencias, filtros y errores.
+
+## Revision de criterios
+
+| Criterio obligatorio revisado                           | Evidencia verificable                                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Plan de pruebas completo                                | Estrategia, matrices, casos felices/limite/fallo y comandos de este documento                                                   |
+| Autenticacion con pytest                                | 52 pruebas en `test_auth.py`, incluidas 22 directas de negocio                                                                  |
+| Backend: logica de negocio, no solo HTTP                | Hash con sal, normalizacion, unicidad, rollback, emision/revocacion de JWT, permisos de bootstrap y recuperacion de un solo uso |
+| Utilidades TypeScript con Jest                          | 50 pruebas para las nueve funciones existentes, con exito y fallo en cada funcion                                               |
+| Cobertura minima del 70 %                               | Python global 90.82 %, autenticacion 97.75 %, negocio aislado 75.84 %; Jest 100 %                                               |
+| Resultados ejecutados y comprobados                     | Informes JSON y comandos reproducibles, typecheck y lint correctos                                                              |
+| Sin actividades extra ni cambios a proyectos anteriores | Misma rama del hito; sin cambios funcionales de aplicacion en esta revision ni fusiones                                         |
+
+### Evidencia de negocio Python
+
+Las funciones `test_business_*` invocan directamente los validadores,
+`create_user`, `login`, `change_password`, `get_current_user`, almacenamiento,
+hashing, recuperacion y `bootstrap_first_admin`. Comprueban:
+
+- Registro normalizado, hash verificable y perfil asociado; entradas invalidas
+  y duplicados no crean ni modifican registros.
+- Fallo al insertar el perfil revierte la creacion del usuario.
+- La misma clave genera hashes distintos con sal; una clave incorrecta no verifica.
+- Login emite identidad y expiracion correctas sin mutar el usuario; credenciales
+  incorrectas no emiten ningun token.
+- Una identidad eliminada o inactiva invalida un JWT previamente valido.
+- Recuperacion aceptada un microsegundo antes de caducar y rechazada exactamente
+  al caducar o despues; la clave y la eliminacion del token reflejan el resultado.
+- Los tokens se almacenan hasheados, se reemplazan por cuenta y solo funcionan
+  una vez, sin afectar a otro usuario.
+- Cambiar la clave exige la clave actual y cambia realmente el hash almacenado.
+- El bootstrap promueve una sola cuenta existente y rechaza credenciales
+  incorrectas o cuentas inactivas sin conceder permisos.
+
+Las pruebas HTTP anteriores tambien verifican invariantes persistentes,
+timestamps, filtros, transiciones, permisos y cambios efectivos de credenciales;
+se conservan como integracion, no como sustituto de estas pruebas directas.
+
+### Matriz de utilidades TypeScript
+
+| Funcion existente      | Camino feliz / limite                                     | Fallo comprobado                                                  |
+| ---------------------- | --------------------------------------------------------- | ----------------------------------------------------------------- |
+| `fetchSuppliers`       | Lista con datos o vacia, sin cache y sin JWT opcional     | Red, sesion caducada, 400/422/404/409/403/500 y JSON invalido     |
+| `createSupplier`       | Datos serializados sin mutar entrada; opcionales omitidos | Red y sesion caducada                                             |
+| `updateRate`           | Tarifa 0.001 y ruta correctas                             | Red y sesion caducada                                             |
+| `updateStatus`         | Estado y ruta correctos; respuesta vacia 204 no se parsea | Red y sesion caducada                                             |
+| `fetchIncidents`       | Lista, filtros combinados, vacios u omitidos              | Red, 400 estructurado/texto/generico, 404/422/500 y JSON invalido |
+| `fetchIncident`        | Identificador y datos correctos                           | Red y 500 con mensaje seguro                                      |
+| `createIncident`       | Datos serializados sin mutar entrada                      | Red y 500 con mensaje seguro                                      |
+| `updateIncidentStatus` | Nuevo estado serializado y ruta correctos                 | Red y 500 con mensaje seguro                                      |
+| `fetchIncidentSummary` | Resumen correcto y sin cache                              | Red y 500 con mensaje seguro                                      |
+
+En proveedores se comprueban cabecera JWT, eliminacion de sesion antes de
+redirigir a login y ausencia de filtracion de detalles del servidor. En
+incidencias se comprueba la propagacion del campo de validacion. Una respuesta
+200 con JSON invalido en incidencias actualmente rechaza con `SyntaxError`;
+la prueba documenta ese comportamiento existente sin cambiar la aplicacion.
+No hay funciones ejecutables en los tipos compartidos; no se inventan
+utilidades nuevas para justificar Jest.
 
 ## Ejecucion reproducible
 
@@ -105,6 +179,43 @@ uv run pytest services/api/tests/test_incidents.py services/api/tests/test_suppl
 
 Estos comandos focalizados no sustituyen a la ejecucion final completa.
 
+### Negocio sin HTTP
+
+Desde la raiz, antes de la suite completa para dejar como informe principal
+la medicion global de la ultima ejecucion:
+
+```bash
+uv run pytest services/api/tests/test_auth.py -k business -o addopts= \
+  --cov=services.api.auth --cov=services.api.routes.auth \
+  --cov-report=term-missing --cov-report=json:htmlcov/business-coverage.json \
+  --cov-fail-under=70 -q
+uv run pytest
+```
+
+`-o addopts=` permite medir solo autenticacion, sin aplicar a este subconjunto
+el denominador del resto del backend. Mantiene cobertura de ramas y el umbral
+conjunto del 70 %. Incluye todos los archivos de autenticacion, tambien bootstrap.
+
+### Jest, TypeScript y lint
+
+Requisito adicional: Node.js 22 y npm. Desde `uis/application`:
+
+```bash
+npm ci
+npm run test:coverage
+npx tsc --noEmit
+npx eslint jest.config.mjs tests/suppliers-api.test.ts tests/incidents-api.test.ts
+```
+
+`npm test` ejecuta las mismas pruebas Jest sin informe de cobertura.
+[jest.config.mjs](uis/application/jest.config.mjs) usa el transformador de Next.js,
+sin servidor ni navegador, y exige el 70 % de lineas, ramas, funciones y
+sentencias. Mide los dos modulos TypeScript con funciones existentes:
+`app/suppliers/api.ts` y `app/incidents/api.ts`. No mide componentes ni representa
+cobertura global de toda la interfaz. Informes locales ignorados por Git:
+`uis/application/coverage/index.html` y
+`uis/application/coverage/coverage-summary.json`.
+
 ## Criterios de aceptacion
 
 1. Todas las pruebas existentes y nuevas pasan; sin fallos ni casos omitidos.
@@ -113,6 +224,8 @@ Estos comandos focalizados no sustituyen a la ejecucion final completa.
 4. Cobertura conjunta minima del 70 %, verificada con pytest-cov y su informe JSON.
 5. No se filtran claves, tokens de recuperacion ni errores internos en respuestas.
 6. No se afectan datos reales, se envian correos ni se realizan actividades extra.
+7. Jest verifica caminos felices y fallos de todas las funciones TypeScript existentes.
+8. Las pruebas directas de negocio verifican invariantes sin depender de HTTP.
 
 ## Regresion corregida
 
@@ -125,9 +238,10 @@ valida que conserva el usuario. Las pruebas verifican la integridad del registro
 ## Resultados verificados
 
 Base inicial: **67 pruebas pasadas**, cobertura conjunta **77.50 %**.
+Revision anterior: **152 pytest**, cobertura global **90.50 %**.
 
 Verificacion final: **2026-10-29**, Linux, Python **3.12.15**, pytest **9.1.1**,
-pytest-cov **7.1.0**. Comandos ejecutados:
+pytest-cov **7.1.0**, Node **22.23.3** y Jest **30.5.2**. Comandos ejecutados:
 
 ```bash
 uv sync --locked --group dev
@@ -135,28 +249,37 @@ uv run pytest
 git diff --check
 ```
 
-| Resultado                              | Valor                                              |
-| -------------------------------------- | -------------------------------------------------- |
-| Pruebas ejecutadas / pasadas           | **152 / 152**                                      |
-| Fallos / errores / omitidas            | **0 / 0 / 0**                                      |
-| Administracion y permisos              | **40 pasadas**                                     |
-| Autenticacion                          | **30 pasadas**                                     |
-| Incidencias                            | **29 pasadas**                                     |
-| Proveedores                            | **53 pasadas**                                     |
-| Duracion de la suite completa          | **41.39 s** (ultima verificacion antes del commit) |
-| Lineas cubiertas                       | **720 / 781 (92.19 %)**                            |
-| Ramas cubiertas                        | **128 / 156 (82.05 %)**                            |
-| Cobertura conjunta                     | **90.50 %**, supera el minimo del **70 %**         |
-| Autenticacion completa: lineas         | **300 / 310 (96.77 %)**                            |
-| Autenticacion completa: ramas          | **45 / 46 (97.83 %)**                              |
-| Autenticacion completa: conjunta       | **96.91 %**, supera el minimo del **70 %**         |
-| Modulos de produccion medidos          | **21**                                             |
-| Controladores de rutas                 | **100 % en cada archivo**                          |
-| Seguridad y recuperacion de contrasena | **100 % en cada archivo**                          |
+| Resultado                              | Valor                                                |
+| -------------------------------------- | ---------------------------------------------------- |
+| Pruebas pytest ejecutadas / pasadas    | **174 / 174**                                        |
+| Fallos / errores / omitidas            | **0 / 0 / 0**                                        |
+| Administracion y permisos              | **40 pasadas**                                       |
+| Autenticacion                          | **52 pasadas**, incluidas **22 de negocio sin HTTP** |
+| Incidencias                            | **29 pasadas**                                       |
+| Proveedores                            | **53 pasadas**                                       |
+| Duracion de la suite pytest completa   | **53.45 s** (ultima verificacion antes del commit)   |
+| Lineas cubiertas                       | **723 / 781 (92.57 %)**                              |
+| Ramas cubiertas                        | **128 / 156 (82.05 %)**                              |
+| Cobertura conjunta                     | **90.82 %**, supera el minimo del **70 %**           |
+| Autenticacion completa: lineas         | **303 / 310 (97.74 %)**                              |
+| Autenticacion completa: ramas          | **45 / 46 (97.83 %)**                                |
+| Autenticacion completa: conjunta       | **97.75 %**, supera el minimo del **70 %**           |
+| Negocio sin HTTP: lineas               | **245 / 310 (79.03 %)**                              |
+| Negocio sin HTTP: ramas                | **25 / 46 (54.35 %)**                                |
+| Negocio sin HTTP: conjunta             | **75.84 %**, supera el minimo conjunto del **70 %**  |
+| Pruebas Jest ejecutadas / pasadas      | **50 / 50**, dos suites, sin omitidas                |
+| Jest proveedores / incidencias         | **22 / 28 pruebas pasadas**                          |
+| Jest lineas / sentencias               | **67 / 67 (100 %) / 69 / 69 (100 %)**                |
+| Jest funciones / ramas                 | **14 / 14 (100 %) / 36 / 36 (100 %)**                |
+| TypeScript / ESLint de pruebas         | **Correctos**, codigo de salida 0                    |
+| Modulos de produccion medidos          | **21**                                               |
+| Controladores de rutas                 | **100 % en cada archivo**                            |
+| Seguridad y recuperacion de contrasena | **100 % en cada archivo**                            |
 
-Los totales se comprobaron leyendo `coverage.json` con `JSON.parse`, verificando
-el umbral y que no se incluyeran archivos de tests. El editor no reporta errores
-en los archivos Python modificados ni en la configuracion del proyecto.
+Los totales se comprobaron leyendo `coverage.json`,
+`htmlcov/business-coverage.json` y el resumen JSON de Jest con `JSON.parse`,
+verificando los umbrales y que no se incluyeran archivos de tests. El editor
+no reporta errores en los archivos de pruebas modificados.
 
 La cobertura de autenticacion completa agrega todos los archivos de
 `services/api/auth/` (incluidos almacenamiento y bootstrap) y
@@ -164,12 +287,23 @@ La cobertura de autenticacion completa agrega todos los archivos de
 `test_auth.py`: se calcula sobre la suite completa. Las rutas de autenticacion,
 la seguridad JWT y la recuperacion de contrasena alcanzan individualmente el
 100 % de lineas y ramas. El paquete `services/api/auth/` sin el controlador
-alcanza el 96.17 % conjunto.
+alcanza el 97.21 % conjunto. La cobertura aislada de negocio no se confunde
+con la de toda la suite: su umbral es conjunto, no el 70 % por cada metrica;
+la suite completa de autenticacion cubre el 97.83 % de ramas.
 
 Advertencia no bloqueante: Starlette avisa de la futura retirada de su soporte
 de `httpx` en `TestClient`. No hay fallos asociados; migrar a `httpx2` queda
 fuera de este hito. La verificacion se ha realizado en Python 3.12, no en todas
 las versiones admitidas por el proyecto.
+
+Advertencias de dependencias: `npm ci` finaliza correctamente pero `npm audit`
+informa de **6 vulnerabilidades (5 bajas y 1 critica)**. La critica corresponde
+a Next.js **16.3.8**, version ya fijada antes de esta revision; las bajas afectan
+a `deepmerge` y su cadena de dependencias de Jest. No se ha ejecutado
+`npm audit fix --force` ni actualizado Next.js fuera del alcance de pruebas.
+Tambien hay avisos de deprecacion de dependencias. Que las pruebas pasen no
+significa que la auditoria de seguridad este limpia; queda pendiente la
+actualizacion de Next.js en un cambio separado antes de desplegar.
 
 Cobertura residual: el modulo compartido `incidents_analysis.py` alcanza el
 37 % porque incluye analisis no expuestos por estos endpoints. Sigue incluido
