@@ -3,6 +3,11 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
 services/api/data/
 node_modules/
 .next/

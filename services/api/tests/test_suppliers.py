@@ -361,3 +361,45 @@ def test_supplier_routes_are_available_under_both_prefixes(client, prefix):
     assert client.patch(f"{prefix}/{supplier_id}/status",
                         json={"status": "suspended"}).status_code == 200
     assert client.delete(f"{prefix}/{supplier_id}").status_code == 204
+
+
+@pytest.mark.parametrize("prefix", ["/suppliers", "/api/suppliers"])
+def test_supplier_boundaries_and_failures_under_both_prefixes(client, prefix):
+    empty = client.get(prefix)
+    assert empty.status_code == 200
+    assert empty.json() == []
+    payload = valid_payload(name="X" * 200, notes="N" * 2000,
+                            categories=["carne", "carne"], rate_per_unit=0.01)
+    created = client.post(prefix, json=payload)
+    assert created.status_code == 201
+    assert created.json()["categories"] == ["carne"]
+    supplier_id = created.json()["id"]
+    url = f"{prefix}/{supplier_id}"
+    for overrides in ({"name": "X" * 201}, {"notes": "N" * 2001}):
+        assert client.post(prefix, json=valid_payload(
+            **overrides)).status_code == 422
+    assert client.post(prefix, json=payload).status_code == 409
+    assert client.get(prefix, params={"status": "invalid"}).status_code == 422
+    assert client.get(prefix, params={"country": "USA"}).json() == []
+    for identifier, expected in (("0", 404), ("abc", 422)):
+        missing_url = f"{prefix}/{identifier}"
+        assert client.get(missing_url).status_code == expected
+        assert client.delete(missing_url).status_code == expected
+        assert client.patch(missing_url + "/rate",
+                            json={"rate_per_unit": 1}).status_code == expected
+        assert client.patch(missing_url + "/status",
+                            json={"status": "active"}).status_code == expected
+    assert client.patch(
+        url + "/rate", json={"rate_per_unit": 0}).status_code == 422
+    assert client.get(url).json() == created.json()
+    updated = client.patch(url + "/rate", json={"rate_per_unit": 0.001})
+    assert updated.status_code == 200
+    assert updated.json()["rate_per_unit"] == 0.001
+    before_status = updated.json()
+    noop = client.patch(url + "/status", json={"status": "active"})
+    assert noop.status_code == 200
+    assert noop.json() == before_status
+    assert client.patch(
+        url + "/status", json={"status": "invalid"}).status_code == 422
+    assert client.delete(url).status_code == 204
+    assert client.delete(url).status_code == 404

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class Role(str, Enum):
@@ -34,6 +34,13 @@ class UserUpdate(BaseModel):
 
     email: EmailStr | None = None
     role: Role | None = None
+
+    @field_validator("email", "role")
+    @classmethod
+    def reject_explicit_null(cls, value: EmailStr | Role | None) -> EmailStr | Role:
+        if value is None:
+            raise ValueError("El campo no puede ser nulo")
+        return value
 
 
 class UserPublic(BaseModel):

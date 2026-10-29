@@ -44,8 +44,14 @@ Do not run multiple API worker processes against the same TinyDB file.
 ## Tests
 
 ```bash
+uv sync --locked --group dev
 uv run pytest
 ```
 
 Tests use temporary databases, check all seed fields against CONTEXT, validate
 HTTP responses and constraints, and cover both canonical and compatibility routes.
+The default test command enforces at least 70% combined line and branch coverage
+for the API and shared Python modules, excluding tests. It generates terminal,
+HTML (`htmlcov/index.html`) and JSON (`coverage.json`) reports.
+See [the AUTH-088 test plan](../../TESTING.md) for the endpoint matrix,
+authentication scenarios, isolated execution and verified results.
