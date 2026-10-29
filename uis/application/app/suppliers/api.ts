@@ -3,6 +3,13 @@ import type { Supplier, SupplierInput, SupplierStatus } from "./types";
 
 const BASE_URL = "/api/suppliers";
 
+export class SupplierApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SupplierApiError";
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem("brasaland_token");
 
@@ -13,52 +20,47 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(url, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers,
+    });
+  } catch {
+    throw new SupplierApiError(
+      "No se pudo conectar con el servidor. Inténtalo de nuevo."
+    );
+  }
 
   if (response.status === 401) {
     localStorage.removeItem("brasaland_token");
     window.location.replace("/login");
-    throw new Error("Sesión caducada. Inicia sesión de nuevo.");
+    throw new SupplierApiError("Sesión caducada. Inicia sesión de nuevo.");
   }
 
   if (!response.ok) {
-    throw new Error(await extractError(response));
+    const message =
+      response.status === 400 || response.status === 422
+        ? "Revisa los datos introducidos."
+        : response.status === 404
+          ? "No se encontró el proveedor solicitado."
+          : response.status === 409
+            ? "Ya existe un proveedor con ese nombre."
+            : "No se pudo completar la operación. Inténtalo de nuevo.";
+
+    throw new SupplierApiError(message);
   }
 
-  return (
-    response.status === 204
-      ? undefined
-      : await response.json()
-  ) as T;
-}
+  if (response.status === 204) return undefined as T;
 
-async function extractError(response: Response): Promise<string> {
   try {
-    const body = await response.json();
-
-    if (typeof body.detail === "string") {
-      return body.detail;
-    }
-
-    if (Array.isArray(body.detail)) {
-      return body.detail
-        .map((err: { loc?: (string | number)[]; msg: string }) => {
-          const field = err.loc
-            ?.filter((part) => part !== "body")
-            .join(".");
-
-          return field ? `${field}: ${err.msg}` : err.msg;
-        })
-        .join(" · ");
-    }
+    return (await response.json()) as T;
   } catch {
-    // Error no JSON
+    throw new SupplierApiError(
+      "El servidor envió una respuesta no válida. Inténtalo de nuevo."
+    );
   }
-
-  return `Error ${response.status}`;
 }
 
 export function fetchSuppliers(): Promise<Supplier[]> {

@@ -1,3 +1,5 @@
+import json
+import sys
 from getpass import getpass
 
 from tinydb import Query
@@ -40,17 +42,30 @@ def bootstrap_first_admin(email: str, password: str):
         }
 
 
-def main():
+def main() -> int:
     print("Configuración del primer administrador")
-    email = input("Email del usuario existente: ")
-    password = getpass("Contraseña: ")
 
     try:
-        admin = bootstrap_first_admin(email, password)
-        print("ADMIN CREADO OK:", admin["email"])
-    except ValueError as error:
-        print("ERROR:", error)
+        email = input("Email del usuario existente: ")
+        password = getpass("Contraseña: ")
+        bootstrap_first_admin(email, password)
+    except EOFError:
+        print("ERROR: No se recibieron las credenciales necesarias.", file=sys.stderr)
+        return 1
+    except json.JSONDecodeError:
+        print("ERROR: No se pudo leer el almacenamiento de usuarios.", file=sys.stderr)
+        return 1
+    except OSError:
+        print("ERROR: No se pudo acceder al almacenamiento de usuarios.",
+              file=sys.stderr)
+        return 1
+    except ValueError:
+        print("ERROR: No se pudo configurar el administrador; revisa los datos.", file=sys.stderr)
+        return 1
+
+    print("ADMIN CREADO OK.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

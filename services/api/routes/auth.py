@@ -1,3 +1,12 @@
+from services.api.auth.security import hash_password
+from services.api.auth.password_reset import (
+    create_reset_token,
+    reset_user_password,
+    send_reset_email,
+)
+from resend.exceptions import ResendError
+from pydantic import EmailStr, Field
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -60,14 +69,6 @@ def get_me(current_user=Depends(get_current_user)):
 
 # AUTH-03: Recuperacion y cambio de contrasena
 
-import logging
-from pydantic import EmailStr, Field
-from services.api.auth.password_reset import (
-    create_reset_token,
-    reset_user_password,
-    send_reset_email,
-)
-from services.api.auth.security import hash_password
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +92,14 @@ def forgot_password(payload: ForgotPasswordRequest):
     user = storage.get_user_by_email(payload.email)
 
     if user and user["is_active"]:
+        token = create_reset_token(user["id"])
         try:
-            token = create_reset_token(user["id"])
             send_reset_email(user["email"], token)
-        except Exception:
-            logger.exception("Error al enviar correo de recuperacion")
+        except (ResendError, RuntimeError) as error:
+            logger.warning(
+                "No se pudo entregar el correo de recuperacion (%s)",
+                type(error).__name__,
+            )
 
     return {
         "message": (

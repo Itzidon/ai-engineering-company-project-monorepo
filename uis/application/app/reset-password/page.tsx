@@ -42,16 +42,13 @@ function ResetPasswordForm() {
       });
 
       if (!response.ok) {
-        throw new Error(
-          "El enlace es inválido, ha caducado o ya se ha utilizado."
-        );
+        setError("El enlace es inválido, ha caducado o ya se ha utilizado.");
+        return;
       }
 
       router.replace("/login?reset=success");
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error de conexión."
-      );
+    } catch {
+      setError("No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }

@@ -141,7 +141,7 @@ def test_historical_seed_is_idempotent(client):
     assert second == first
 
 
-def test_unexpected_error_is_safe(client):
+def test_unexpected_error_is_safe(client, caplog):
     with patch(
         "services.api.routes.incidents.db.list_incidents",
         side_effect=RuntimeError("SECRETO_INTERNO"),
@@ -151,3 +151,23 @@ def test_unexpected_error_is_safe(client):
     assert response.status_code == 500
     assert "SECRETO_INTERNO" not in response.text
     assert "Traceback" not in response.text
+    assert "SECRETO_INTERNO" not in caplog.text
+    assert "Traceback" not in caplog.text
+    assert response.json() == {
+        "detail": {
+            "code": "internal_error",
+            "message": "Se produjo un error interno.",
+        }
+    }
+
+
+def test_request_validation_error_does_not_echo_sensitive_input(client):
+    response = client.post("/users", json={
+        "email": "not-an-email",
+        "password": "ClavePrivada123!",
+    })
+
+    assert response.status_code == 422
+    assert "ClavePrivada123!" not in response.text
+    assert "input" not in response.text
+    assert response.json()["detail"][0]["loc"] == ["body", "email"]

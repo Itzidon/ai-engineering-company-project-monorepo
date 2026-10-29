@@ -28,7 +28,7 @@ def create_supplier(payload: SupplierCreate):
     if database.find_by_name(payload.name):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"A supplier named '{payload.name}' already exists.",
+            detail="A supplier with that name already exists.",
         )
     return database.insert_supplier(payload.model_dump(mode="json"))
 
@@ -70,7 +70,8 @@ def update_rate(supplier_id: int, payload: RateUpdate):
 
 @router.patch("/{supplier_id}/status", response_model=Supplier)
 def update_status(supplier_id: int, payload: StatusUpdate):
-    supplier = database.update_supplier(supplier_id, {"status": payload.status})
+    supplier = database.update_supplier(
+        supplier_id, {"status": payload.status})
     if supplier is None:
         raise _not_found(supplier_id)
     return supplier

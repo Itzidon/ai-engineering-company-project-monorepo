@@ -1,4 +1,7 @@
 
+from packages.shared.incident_validation import IncidentCreate
+from services.api import database, incident_database
+from packages.shared.incidents_analysis import validate_record
 import csv
 import sys
 from datetime import datetime, timezone
@@ -10,12 +13,16 @@ from tinydb import Query
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from packages.shared.incidents_analysis import validate_record
-from services.api import database, incident_database
-from packages.shared.incident_validation import IncidentCreate
-
 
 CSV_PATH = ROOT / "scripts" / "incidents-brasaland.csv"
+REQUIRED_COLUMNS = {
+    "date",
+    "description",
+    "category",
+    "status",
+    "location_id",
+    "reporter_id",
+}
 
 STATUS_MAP = {
     "OPEN": "open",
@@ -80,6 +87,7 @@ def seed():
     inserted = 0
     skipped = 0
     invalid = 0
+    records_seen = 0
 
     # Los identificadores CSV se guardan aparte,
     # nunca dentro del modelo Incident.
@@ -89,52 +97,74 @@ def seed():
     with CSV_PATH.open(
         encoding="utf-8-sig", newline=""
     ) as file:
-        reader = csv.DictReader(file)
+        reader = csv.DictReader(file, strict=True)
+        missing_columns = REQUIRED_COLUMNS - set(reader.fieldnames or ())
+        if missing_columns:
+            raise csv.Error("CSV header is missing required columns")
 
         for line_number, row in enumerate(reader, start=2):
+            records_seen += 1
+            if None in row or any(
+                row.get(column) is None
+                for column in REQUIRED_COLUMNS
+            ):
+                invalid += 1
+                print(
+                    f"Fila {line_number} descartada: columnas ausentes o malformadas.",
+                    file=sys.stderr,
+                )
+                continue
+
             errors = validate_record(row)
+            if not row.get("date", "").strip():
+                errors.append("missing_date")
 
             if errors:
                 invalid += 1
                 print(
                     f"Fila {line_number} descartada: "
-                    f"{', '.join(errors)}"
+                    f"{', '.join(errors)}",
+                    file=sys.stderr,
                 )
                 continue
 
             try:
                 incident, created_at = transform_record(row)
-
-                source_id = (
-                    row.get("incident_id") or ""
-                ).strip()
-
-                key = source_id or (
-                    f"{incident.title}|{created_at}"
-                )
-
-                with database._lock:
-                    if registry.get(SeedKey.key == key):
-                        skipped += 1
-                        continue
-
-                    incident_database.create_incident(
-                        incident.model_dump(mode="json"),
-                        created_at=created_at,
-                    )
-
-                    registry.insert({"key": key})
-                    inserted += 1
-
             except (
                 ValueError,
                 KeyError,
                 ValidationError,
-            ) as error:
+            ):
                 invalid += 1
                 print(
-                    f"Fila {line_number} descartada: {error}"
+                    f"Fila {line_number} descartada: datos no válidos.",
+                    file=sys.stderr,
                 )
+                continue
+
+            source_id = (
+                row.get("incident_id") or ""
+            ).strip()
+
+            key = source_id or (
+                f"{incident.title}|{created_at}"
+            )
+
+            with database._lock:
+                if registry.get(SeedKey.key == key):
+                    skipped += 1
+                    continue
+
+                incident_database.create_incident(
+                    incident.model_dump(mode="json"),
+                    created_at=created_at,
+                )
+
+                registry.insert({"key": key})
+                inserted += 1
+
+    if records_seen == 0:
+        raise csv.Error("CSV contains no data rows")
 
     print("\n=== SEED BRASALAND ===")
     print("Insertadas:", inserted)
@@ -151,5 +181,41 @@ def seed():
     database.close_db()
 
 
+def main() -> int:
+    exit_code = 0
+
+    try:
+        seed()
+    except FileNotFoundError:
+        print(
+            "No se encontró un archivo CSV o de almacenamiento necesario.",
+            file=sys.stderr,
+        )
+        exit_code = 1
+    except PermissionError:
+        print(
+            "No se pudo acceder al archivo o almacenamiento de incidencias.",
+            file=sys.stderr,
+        )
+        exit_code = 1
+    except (csv.Error, UnicodeError, OSError, ValueError, KeyError):
+        print(
+            "No se pudo leer el CSV o actualizar el almacenamiento de incidencias.",
+            file=sys.stderr,
+        )
+        exit_code = 1
+    finally:
+        try:
+            database.close_db()
+        except OSError:
+            print(
+                "No se pudo cerrar el almacenamiento de incidencias.",
+                file=sys.stderr,
+            )
+            exit_code = 1
+
+    return exit_code
+
+
 if __name__ == "__main__":
-    seed()
+    sys.exit(main())

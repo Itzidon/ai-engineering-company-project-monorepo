@@ -35,12 +35,14 @@ export default function RegisterPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data.detail)) {
+        const data = await response.json().catch(() => null);
+        if (Array.isArray(data?.detail)) {
           const fieldErrors: Record<string, string> = {};
           for (const err of data.detail) {
             const field = String(err.loc?.at(-1) ?? "general");
-            fieldErrors[field] = err.msg;
+            fieldErrors[field] = field === "password"
+              ? "La contraseña no cumple los requisitos mínimos."
+              : "Revisa este dato e inténtalo de nuevo.";
           }
           setErrors(fieldErrors);
           return;
@@ -48,9 +50,9 @@ export default function RegisterPage() {
 
         setErrors({
           [response.status === 409 ? "email" : "general"]:
-            typeof data.detail === "string"
-              ? data.detail
-              : "No se pudo completar el registro.",
+            response.status === 409
+              ? "Ya existe una cuenta con este correo."
+              : "No se pudo completar el registro. Inténtalo de nuevo.",
         });
         return;
       }
@@ -66,21 +68,20 @@ export default function RegisterPage() {
         }),
       });
 
-      const loginData = await loginResponse.json();
+      const loginData = await loginResponse.json().catch(() => null);
 
-      if (!loginResponse.ok || !loginData.access_token) {
-        throw new Error(
-          "Cuenta creada. Inicia sesión desde la página de login."
-        );
+      if (!loginResponse.ok || !loginData?.access_token) {
+        setErrors({
+          general: "Cuenta creada, pero no se pudo iniciar sesión. Continúa desde la página de acceso.",
+        });
+        return;
       }
 
       localStorage.setItem("brasaland_token", loginData.access_token);
       router.replace("/suppliers");
-    } catch (err) {
+    } catch {
       setErrors({
-        general: err instanceof Error
-          ? err.message
-          : "Error de conexión.",
+        general: "No se pudo completar el registro. Comprueba tu conexión e inténtalo de nuevo.",
       });
     } finally {
       setLoading(false);

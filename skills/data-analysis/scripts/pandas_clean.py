@@ -2,10 +2,45 @@
 Safe snippet for basic pandas cleaning. Copy and adapt for your dataset.
 Run: python pandas_clean.py  (ensure pandas is installed)
 """
-import pandas as pd
+import sys
+from pathlib import Path
 
-# Load (adjust path and kwargs as needed)
-df = pd.read_csv("data.csv")  # or read_json, read_excel
+try:
+    import pandas as pd
+except ModuleNotFoundError:
+    print(
+        "No se puede ejecutar la limpieza: instala la dependencia pandas.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+DATA_PATH = Path("data.csv")
+
+try:
+    df = pd.read_csv(DATA_PATH)
+except FileNotFoundError:
+    print("No se encontró el archivo data.csv.", file=sys.stderr)
+    sys.exit(1)
+except PermissionError:
+    print("No se pudo acceder al archivo data.csv.", file=sys.stderr)
+    sys.exit(1)
+except pd.errors.EmptyDataError:
+    print("El archivo data.csv está vacío o no tiene encabezados.", file=sys.stderr)
+    sys.exit(1)
+except pd.errors.ParserError:
+    print("El archivo data.csv tiene un formato CSV inválido.", file=sys.stderr)
+    sys.exit(1)
+except UnicodeError:
+    print("No se pudo decodificar data.csv; comprueba su codificación.", file=sys.stderr)
+    sys.exit(1)
+except OSError:
+    print("No se pudo leer el archivo data.csv.", file=sys.stderr)
+    sys.exit(1)
+
+if df.empty or len(df.columns) == 0:
+    print("El archivo data.csv no contiene filas de datos.", file=sys.stderr)
+    sys.exit(1)
+
 print("df_shape", df.shape)
 print("df_dtypes", df.dtypes)
 
@@ -26,5 +61,5 @@ before = len(df)
 df = df.drop_duplicates()
 print("rows_dropped_duplicates", before - len(df))
 
-# Sample output
-print("df_head", df.head())
+# Report preview size without printing source data.
+print("df_preview_rows", min(5, len(df)))

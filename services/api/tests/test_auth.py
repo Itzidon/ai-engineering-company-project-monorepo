@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta, timezone
 import secrets
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
+from resend.exceptions import ResendError
 
 from services.api.main import app
 from services.api.auth import storage
@@ -68,10 +70,13 @@ def test_permissions(client):
     headers = login(client, "ana@example.com")
 
     assert client.get("/users", headers=headers).status_code == 403
-    assert client.get(f"/users/{bob['id']}", headers=headers).status_code == 403
-    assert client.delete(f"/users/{bob['id']}", headers=headers).status_code == 403
+    assert client.get(f"/users/{bob['id']}",
+                      headers=headers).status_code == 403
+    assert client.delete(
+        f"/users/{bob['id']}", headers=headers).status_code == 403
 
-    assert client.get(f"/users/{ana['id']}", headers=headers).status_code == 200
+    assert client.get(f"/users/{ana['id']}",
+                      headers=headers).status_code == 200
 
     invalid_role = client.put(
         f"/users/{ana['id']}",
@@ -103,3 +108,47 @@ def test_invalid_and_expired_tokens(client, monkeypatch):
         "/profiles/me",
         headers={"Authorization": f"Bearer {expired}"},
     ).status_code == 401
+
+
+def test_forgot_password_handles_resend_failure_without_leaking_details(
+    client,
+    caplog,
+):
+    register(client, "ana@example.com")
+    resend_error = ResendError(
+        code=503,
+        error_type="ProviderError",
+        message="SENSITIVE_PROVIDER_RESPONSE",
+        suggested_action="Retry later",
+    )
+
+    with patch(
+        "services.api.routes.auth.send_reset_email",
+        side_effect=resend_error,
+    ):
+        response = client.post(
+            "/auth/forgot-password",
+            json={"email": "ana@example.com"},
+        )
+
+    assert response.status_code == 200
+    assert "SENSITIVE_PROVIDER_RESPONSE" not in response.text
+    assert "ProviderError" not in response.text
+    assert "No se pudo entregar el correo de recuperacion" in caplog.text
+
+
+def test_forgot_password_handles_missing_resend_configuration(client, caplog):
+    register(client, "ana@example.com")
+
+    with patch(
+        "services.api.routes.auth.send_reset_email",
+        side_effect=RuntimeError("RESEND_API_KEY no configurada"),
+    ):
+        response = client.post(
+            "/auth/forgot-password",
+            json={"email": "ana@example.com"},
+        )
+
+    assert response.status_code == 200
+    assert "RESEND_API_KEY" not in response.text
+    assert "No se pudo entregar el correo de recuperacion" in caplog.text

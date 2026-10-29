@@ -45,25 +45,25 @@ export default function ChangePasswordPage() {
       });
 
       if (response.status === 401) {
-        throw new Error("Tu sesión ha caducado. Inicia sesión de nuevo.");
+        setError("Tu sesión ha caducado. Inicia sesión de nuevo.");
+        return;
       }
 
       if (!response.ok) {
-        throw new Error(
+        setError(
           response.status === 400
             ? "La contraseña actual es incorrecta."
-            : "No se pudo cambiar la contraseña."
+            : "No se pudo cambiar la contraseña. Inténtalo de nuevo."
         );
+        return;
       }
 
       setSuccess("Contraseña cambiada correctamente.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error de conexión."
-      );
+    } catch {
+      setError("No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }

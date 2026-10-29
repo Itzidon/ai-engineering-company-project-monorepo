@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchSuppliers } from "./api";
+import { fetchSuppliers, SupplierApiError } from "./api";
 import SupplierCard from "./SupplierCard";
 import SupplierForm from "./SupplierForm";
 import styles from "./suppliers.module.css";
@@ -21,6 +21,7 @@ export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -29,11 +30,34 @@ export default function SuppliersPage() {
   const [status, setStatus] = useState<SupplierStatus | "">("");
 
   useEffect(() => {
-    fetchSuppliers()
-      .then(setSuppliers)
-      .catch((err) => setError(err instanceof Error ? err.message : "Error al cargar."))
-      .finally(() => setLoading(false));
-  }, []);
+    let active = true;
+
+    async function loadSuppliers() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await fetchSuppliers();
+        if (active) setSuppliers(data);
+      } catch (err) {
+        if (active) {
+          setError(
+            err instanceof SupplierApiError
+              ? err.message
+              : "No se pudieron cargar los proveedores. Inténtalo de nuevo."
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadSuppliers();
+
+    return () => {
+      active = false;
+    };
+  }, [reloadCount]);
 
   const filtered = useMemo(
     () =>
@@ -148,7 +172,19 @@ export default function SuppliersPage() {
       </section>
 
       {loading && <p>Cargando proveedores…</p>}
-      {error && <p className={styles.error}>No se pudo conectar con la API: {error}</p>}
+      {error && (
+        <div role="alert" className={styles.error}>
+          <p>{error}</p>
+          <button
+            type="button"
+            className={styles.secondary}
+            onClick={() => setReloadCount((current) => current + 1)}
+            disabled={loading}
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {!loading && !error && (
         <>

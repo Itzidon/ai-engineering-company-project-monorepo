@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateRate, updateStatus } from "./api";
+import { SupplierApiError, updateRate, updateStatus } from "./api";
 import styles from "./suppliers.module.css";
 import { CATEGORY_LABELS, STATUS_LABELS, type Supplier } from "./types";
 
@@ -40,7 +40,11 @@ export default function SupplierCard({ supplier, onUpdated }: Props) {
       onUpdated(await action());
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error inesperado.");
+      setError(
+        err instanceof SupplierApiError
+          ? err.message
+          : "No se pudo actualizar el proveedor. Inténtalo de nuevo."
+      );
       return false;
     } finally {
       setBusy(false);

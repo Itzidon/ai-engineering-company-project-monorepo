@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createSupplier } from "./api";
+import { createSupplier, SupplierApiError } from "./api";
 import styles from "./suppliers.module.css";
 import {
   CATEGORIES,
@@ -66,7 +66,11 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
       });
       onCreated(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo registrar el proveedor.");
+      setError(
+        err instanceof SupplierApiError
+          ? err.message
+          : "No se pudo registrar el proveedor. Inténtalo de nuevo."
+      );
     } finally {
       setSaving(false);
     }

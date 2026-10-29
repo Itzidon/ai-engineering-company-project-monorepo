@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from services.api.main import app
 from services.api.auth import storage
+from services.api.auth import bootstrap_admin
 from services.api.auth.bootstrap_admin import bootstrap_first_admin
 
 
@@ -52,6 +53,47 @@ def test_first_admin(client):
             "admin@example.com",
             "ClaveAdmin123!",
         )
+
+
+def test_bootstrap_cli_returns_nonzero_without_echoing_credentials(
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.setattr("builtins.input", lambda _prompt: "admin@example.com")
+    monkeypatch.setattr(bootstrap_admin, "getpass",
+                        lambda _prompt: "secret-password")
+    monkeypatch.setattr(
+        bootstrap_admin,
+        "bootstrap_first_admin",
+        lambda _email, _password: (_ for _ in ()).throw(
+            ValueError("invalid credentials")
+        ),
+    )
+
+    assert bootstrap_admin.main() == 1
+    captured = capsys.readouterr()
+    assert "ERROR:" in captured.err
+    assert "secret-password" not in captured.out + captured.err
+    assert "admin@example.com" not in captured.out + captured.err
+
+
+def test_bootstrap_cli_handles_missing_storage_safely(monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda _prompt: "admin@example.com")
+    monkeypatch.setattr(bootstrap_admin, "getpass",
+                        lambda _prompt: "secret-password")
+    monkeypatch.setattr(
+        bootstrap_admin,
+        "bootstrap_first_admin",
+        lambda _email, _password: (_ for _ in ()).throw(
+            OSError("/private/path/auth.json")
+        ),
+    )
+
+    assert bootstrap_admin.main() == 1
+    captured = capsys.readouterr()
+    assert "storage" not in captured.err.lower(
+    ) or "almacenamiento" in captured.err.lower()
+    assert "/private/path" not in captured.out + captured.err
 
 
 def test_user_cannot_become_admin(client):
