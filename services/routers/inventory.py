@@ -178,8 +178,8 @@ def create_outbound(
     if ingredient is None:
         raise HTTPException(404, "Ingredient not found")
 
-    available = location_stock(
-        db, payload.ingredient_id, payload.location_id
+    available = calculate_stock(
+        db, payload.ingredient_id
     )
 
     if payload.quantity > available:
