@@ -39,12 +39,29 @@ def list_products(
     db: Session = Depends(get_db),
 ):
     query = select(Ingredient)
-
     if country:
         query = query.where(Ingredient.country == country)
 
     ingredients = db.exec(query).all()
-    return [ingredient_response(db, item) for item in ingredients]
+
+    entries = dict(db.exec(
+        select(IngredientEntry.ingredient_id, func.sum(IngredientEntry.quantity))
+        .group_by(IngredientEntry.ingredient_id)
+    ).all())
+
+    exits = dict(db.exec(
+        select(IngredientExit.ingredient_id, func.sum(IngredientExit.quantity))
+        .group_by(IngredientExit.ingredient_id)
+    ).all())
+
+    return [
+        IngredientResponse(
+            **item.model_dump(),
+            current_stock=float(entries.get(item.id, 0) or 0)
+            - float(exits.get(item.id, 0) or 0),
+        )
+        for item in ingredients
+    ]
 
 
 @router.get("/products/{id}", response_model=IngredientResponse)
