@@ -13,6 +13,9 @@ dependencies = [
     "python-multipart>=0.0.32",
     "resend>=2.49.1",
     "python-dotenv>=1.2.4",
+    "sqlmodel>=0.0.48",
+    "psycopg2-binary>=2.9.13",
+    "psycopg[binary]>=3.3.7",
 ]
 
 [project.scripts]

@@ -104,3 +104,8 @@ def root():
         "incidents": "/api/incidents",
         "docs": "/docs",
     }
+
+# Inventario Brasaland - Hito 5
+from services.routers.inventory import router as inventory_router
+
+app.include_router(inventory_router)
