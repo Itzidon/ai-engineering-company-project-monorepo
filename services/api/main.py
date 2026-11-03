@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -7,6 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
 from services.api import database
+from services.database import create_db_and_tables
 from services.api.auth.security import get_current_user
 from services.api.routes.auth import router as auth_router
 from services.api.routes.users import router as users_router
@@ -19,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if os.getenv('DATABASE_URL'):
+        create_db_and_tables()
     yield
     database.close_db()
 
