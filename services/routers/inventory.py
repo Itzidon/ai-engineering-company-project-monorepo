@@ -9,7 +9,7 @@ from services.models import Ingredient, IngredientEntry, IngredientExit
 from services.schemas import IngredientCreate, IngredientResponse
 from services.api.auth.security import get_current_user
 
-router = APIRouter(prefix="/inventory", tags=["inventory"])
+router = APIRouter(prefix="/inventory", tags=["inventory"], dependencies=[Depends(get_current_user)])
 
 
 def calculate_stock(db: Session, ingredient_id: int):
