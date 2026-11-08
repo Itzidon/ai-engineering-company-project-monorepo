@@ -135,6 +135,30 @@ def location_stock(db, ingredient_id, location_id):
     return float(entries) - float(exits)
 
 
+@router.get("/products/{id}/locations/{location_id}/stock")
+def get_local_product_stock(
+    id: int,
+    location_id: int,
+    db: Session = Depends(get_db),
+):
+    if not 1 <= location_id <= 14:
+        raise HTTPException(400, "Invalid location")
+
+    ingredient = db.get(Ingredient, id)
+    if ingredient is None:
+        raise HTTPException(404, "Ingredient not found")
+
+    return {
+        "product_id": id,
+        "location_id": location_id,
+        "country": ingredient.country,
+        "unit": ingredient.unit,
+        "current_stock": location_stock(
+            db, id, location_id
+        ),
+    }
+
+
 @router.post(
     "/orders/inbound",
     response_model=IngredientEntryResponse,
@@ -178,8 +202,8 @@ def create_outbound(
     if ingredient is None:
         raise HTTPException(404, "Ingredient not found")
 
-    available = calculate_stock(
-        db, payload.ingredient_id
+    available = location_stock(
+        db, payload.ingredient_id, payload.location_id
     )
 
     if payload.quantity > available:

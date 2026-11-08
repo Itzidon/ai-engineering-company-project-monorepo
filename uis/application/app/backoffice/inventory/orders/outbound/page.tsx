@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   fetchIngredients,
   fetchIngredient,
+  fetchLocalStock,
   createOutboundOrder,
   type Ingredient,
 } from "../../../../../lib/inventory";
 
+import { track } from "../../../../../lib/telemetry";
+
 export default function OutboundPage() {
   const router = useRouter();
+  const trackedFormVisit = useRef(false);
 
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Ingredient[]>([]);
@@ -21,6 +25,10 @@ export default function OutboundPage() {
   const [reason, setReason] = useState<"consumption" | "waste">(
     "consumption"
   );
+  const [wasteReason, setWasteReason] = useState<
+    "expired" | "kitchen_error" | "theft_suspected"
+  >("expired");
+
   const [locationId, setLocationId] = useState("1");
 
   const [loading, setLoading] = useState(true);
@@ -37,6 +45,16 @@ export default function OutboundPage() {
     }
 
     setAuthenticated(true);
+
+    if (!trackedFormVisit.current) {
+      trackedFormVisit.current = true;
+      track("outbound_order_form_started", {
+        form_route: "/backoffice/inventory/orders/outbound",
+        source: new URLSearchParams(
+          window.location.search
+        ).has("ingredient_id") ? "inventory" : "deep_link",
+      });
+    }
 
     fetchIngredients()
       .then((data) => {
@@ -67,9 +85,17 @@ export default function OutboundPage() {
     setSelected(null);
     setStockError("");
 
-    fetchIngredient(Number(ingredientId))
-      .then(data => {
-        if (active) setSelected(data);
+    Promise.all([
+      fetchIngredient(Number(ingredientId)),
+      fetchLocalStock(Number(ingredientId), Number(locationId)),
+    ])
+      .then(([data, local]) => {
+        if (active) {
+          setSelected({
+            ...data,
+            current_stock: local.current_stock,
+          });
+        }
       })
       .catch(err => {
         if (active) setStockError(
@@ -82,7 +108,7 @@ export default function OutboundPage() {
       });
 
     return () => { active = false; };
-  }, [ingredientId]);
+  }, [ingredientId, locationId]);
 
   const amount = Number(quantity);
   const available = selected?.current_stock ?? 0;
@@ -108,19 +134,53 @@ export default function OutboundPage() {
     setSaving(true);
 
     try {
-      await createOutboundOrder({
+      const created = await createOutboundOrder({
         ingredient_id: selected.id,
         quantity: amount,
         reason,
         location_id: Number(locationId),
       });
 
+      if (reason === "consumption") {
+        track("outbound_order_created", {
+          location_id: Number(locationId),
+          country: selected.country,
+          product_id: selected.id,
+          product_category: selected.category,
+          quantity: amount,
+          unit: selected.unit,
+          currency: selected.country === "CO" ? "COP" : "USD",
+          outbound_order_id: created.id,
+          reason: "consumption",
+        });
+      }
+
+      if (reason === "waste") {
+        track("stock_waste_registered", {
+          location_id: Number(locationId),
+          country: selected.country,
+          product_id: selected.id,
+          product_category: selected.category,
+          quantity: amount,
+          unit: selected.unit,
+          currency: selected.country === "CO" ? "COP" : "USD",
+          outbound_order_id: created.id,
+          reason: wasteReason,
+        });
+      }
+
       setSuccess("Salida registrada correctamente.");
       setQuantity("");
 
       // Consultar de nuevo el stock real tras la salida.
-      const updated = await fetchIngredient(selected.id);
-      setSelected(updated);
+      const [updated, local] = await Promise.all([
+        fetchIngredient(selected.id),
+        fetchLocalStock(selected.id, Number(locationId)),
+      ]);
+      setSelected({
+        ...updated,
+        current_stock: local.current_stock,
+      });
     } catch (err) {
       setError(err instanceof Error
         ? err.message
@@ -268,6 +328,24 @@ export default function OutboundPage() {
               <option value="waste">Merma</option>
             </select>
           </label>
+
+          {reason === "waste" && (
+            <label>
+              Causa de la merma
+              <select
+                style={field}
+                value={wasteReason}
+                onChange={e => setWasteReason(
+                  e.target.value as
+                    "expired" | "kitchen_error" | "theft_suspected"
+                )}
+              >
+                <option value="expired">Producto caducado</option>
+                <option value="kitchen_error">Error de cocina</option>
+                <option value="theft_suspected">Posible robo</option>
+              </select>
+            </label>
+          )}
 
           <label>
             Local (1-14)

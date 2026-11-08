@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -9,8 +9,11 @@ import {
   type Ingredient,
 } from "../../../../../lib/inventory";
 
+import { track } from "../../../../../lib/telemetry";
+
 export default function InboundPage() {
   const router = useRouter();
+  const trackedFormVisit = useRef(false);
 
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<Ingredient[]>([]);
@@ -34,6 +37,16 @@ export default function InboundPage() {
     }
 
     setAuthenticated(true);
+
+    if (!trackedFormVisit.current) {
+      trackedFormVisit.current = true;
+      track("inbound_order_form_started", {
+        form_route: "/backoffice/inventory/orders/inbound",
+        source: new URLSearchParams(
+          window.location.search
+        ).has("ingredient_id") ? "inventory" : "deep_link",
+      });
+    }
 
     const params = new URLSearchParams(window.location.search);
     const selectedId = params.get("ingredient_id");
@@ -77,12 +90,29 @@ export default function InboundPage() {
     setSaving(true);
 
     try {
-      await createInboundOrder({
+      const created = await createInboundOrder({
         ingredient_id: Number(ingredientId),
         quantity: amount,
         supplier_name: supplier.trim(),
         location_id: location,
       });
+
+      const product = products.find(
+        p => p.id === Number(ingredientId)
+      );
+
+      if (product) {
+        track("inbound_order_created", {
+          location_id: location,
+          country: product.country,
+          product_id: product.id,
+          product_category: product.category,
+          quantity: amount,
+          unit: product.unit,
+          currency: product.country === "CO" ? "COP" : "USD",
+          inbound_order_id: created.id,
+        });
+      }
 
       setSuccess("Entrega registrada correctamente.");
 

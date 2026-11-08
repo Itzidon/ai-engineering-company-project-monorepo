@@ -16,6 +16,8 @@ from services.api.routes.profiles import router as profiles_router
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.incidents import router as incidents_router
 
+from services.api.routes.telemetry import router as telemetry_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,3 +115,5 @@ def root():
 from services.routers.inventory import router as inventory_router
 
 app.include_router(inventory_router)
+
+app.include_router(telemetry_router)

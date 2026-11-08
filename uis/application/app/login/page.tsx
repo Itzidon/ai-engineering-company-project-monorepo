@@ -47,6 +47,10 @@ function LoginForm() {
       }
 
       localStorage.setItem("brasaland_token", data.access_token);
+      sessionStorage.setItem(
+        "brasaland_telemetry_session",
+        crypto.randomUUID()
+      );
       router.replace("/suppliers");
     } catch {
       setError("No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.");
