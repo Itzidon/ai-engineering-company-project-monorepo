@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field
 
@@ -33,3 +34,16 @@ class IngredientExit(SQLModel, table=True):
     location_id: int
     created_at: datetime = Field(default_factory=utc_now)
     user_uuid: str
+
+
+class IngredientPriceRecord(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    ingredient_id: int = Field(foreign_key="ingredient.id")
+    location_id: int
+    supplier_key: str
+    unit_cost: Decimal = Field(
+        max_digits=14,
+        decimal_places=4,
+    )
+    currency: str
+    created_at: datetime = Field(default_factory=utc_now)

@@ -1,3 +1,12 @@
+from uuid import NAMESPACE_URL, uuid5
+from services.schemas import (
+    IngredientEntryCreate,
+    IngredientExitCreate,
+    IngredientEntryResponse,
+    IngredientExitResponse,
+    OrderResponse,
+)
+from services.api.auth import storage
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,11 +14,12 @@ from sqlmodel import Session, select, func
 from sqlalchemy.exc import IntegrityError
 
 from services.database import get_db
-from services.models import Ingredient, IngredientEntry, IngredientExit
+from services.models import Ingredient, IngredientEntry, IngredientExit, IngredientPriceRecord
 from services.schemas import IngredientCreate, IngredientResponse
 from services.api.auth.security import get_current_user
 
-router = APIRouter(prefix="/inventory", tags=["inventory"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/inventory",
+                   tags=["inventory"], dependencies=[Depends(get_current_user)])
 
 
 def calculate_stock(db: Session, ingredient_id: int):
@@ -45,7 +55,8 @@ def list_products(
     ingredients = db.exec(query).all()
 
     entries = dict(db.exec(
-        select(IngredientEntry.ingredient_id, func.sum(IngredientEntry.quantity))
+        select(IngredientEntry.ingredient_id,
+               func.sum(IngredientEntry.quantity))
         .group_by(IngredientEntry.ingredient_id)
     ).all())
 
@@ -91,16 +102,6 @@ def create_product(
         raise HTTPException(409, "SKU already exists")
 
     return ingredient_response(db, ingredient)
-
-from uuid import NAMESPACE_URL, uuid5
-from services.api.auth import storage
-from services.schemas import (
-    IngredientEntryCreate,
-    IngredientExitCreate,
-    IngredientEntryResponse,
-    IngredientExitResponse,
-    OrderResponse,
-)
 
 
 def get_user_uuid(user):
@@ -159,6 +160,32 @@ def get_local_product_stock(
     }
 
 
+@router.patch("/products/{id}/locations/{location_id}/stock")
+def reject_direct_stock_edit(
+    id: int,
+    location_id: int,
+    db: Session = Depends(get_db),
+):
+    if not 1 <= location_id <= 14:
+        raise HTTPException(400, "Invalid location")
+
+    ingredient = db.get(Ingredient, id)
+    if ingredient is None:
+        raise HTTPException(404, "Ingredient not found")
+
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "code": "forbidden_direct_update",
+            "product_id": ingredient.id,
+            "location_id": location_id,
+            "country": ingredient.country,
+            "product_category": ingredient.category,
+            "unit": ingredient.unit,
+        },
+    )
+
+
 @router.post(
     "/orders/inbound",
     response_model=IngredientEntryResponse,
@@ -173,14 +200,64 @@ def create_inbound(
     if ingredient is None:
         raise HTTPException(404, "Ingredient not found")
 
+    baseline_unit_cost = None
+    variance_pct = None
+    supplier_key = None
+
     entry = IngredientEntry(
-        **payload.model_dump(),
+        **payload.model_dump(exclude={"unit_cost"}),
         user_uuid=get_user_uuid(user),
     )
     db.add(entry)
+
+    if payload.unit_cost is not None:
+        from hashlib import sha256
+
+        supplier_key = sha256(
+            payload.supplier_name.strip().casefold().encode("utf-8")
+        ).hexdigest()
+
+        from services.price_variance import detect_price_variance
+
+        previous = db.exec(
+            select(IngredientPriceRecord)
+            .where(
+                IngredientPriceRecord.ingredient_id == payload.ingredient_id,
+                IngredientPriceRecord.supplier_key == supplier_key,
+                IngredientPriceRecord.currency == (
+                    "COP" if ingredient.country == "CO" else "USD"
+                ),
+            )
+            .order_by(
+                IngredientPriceRecord.created_at.desc(),
+                IngredientPriceRecord.id.desc(),
+            )
+            .limit(1)
+        ).first()
+
+        if previous is not None:
+            baseline_unit_cost = float(previous.unit_cost)
+            variance_pct, _ = detect_price_variance(
+                payload.unit_cost, previous.unit_cost
+            )
+
+        db.add(IngredientPriceRecord(
+            ingredient_id=payload.ingredient_id,
+            location_id=payload.location_id,
+            supplier_key=supplier_key,
+            unit_cost=payload.unit_cost,
+            currency="COP" if ingredient.country == "CO" else "USD",
+        ))
+
     db.commit()
     db.refresh(entry)
-    return IngredientEntryResponse(**entry.model_dump())
+    return IngredientEntryResponse(
+        **entry.model_dump(),
+        unit_cost=payload.unit_cost,
+        supplier_key=supplier_key,
+        baseline_unit_cost=baseline_unit_cost,
+        variance_pct=variance_pct,
+    )
 
 
 @router.post(
@@ -220,7 +297,11 @@ def create_outbound(
     db.add(exit_record)
     db.commit()
     db.refresh(exit_record)
-    return IngredientExitResponse(**exit_record.model_dump())
+    return IngredientExitResponse(
+        **exit_record.model_dump(),
+        previous_stock=available,
+        current_stock=available - payload.quantity,
+    )
 
 
 @router.get("/orders", response_model=list[OrderResponse])

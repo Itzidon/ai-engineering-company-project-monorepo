@@ -1,11 +1,15 @@
 
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   agentRules: false,
+  turbopack: {
+    root: path.resolve(__dirname, "../.."),
+  },
 
   async rewrites() {
     return [

@@ -1,4 +1,5 @@
 import { track } from "./telemetry";
+import minimums from "./stock-minimums.json";
 
 export type Ingredient = {
   id: number;
@@ -29,6 +30,7 @@ export type InboundData = {
   quantity: number;
   supplier_name: string;
   location_id: number;
+  unit_cost?: number;
 };
 
 export type OutboundData = {
@@ -82,12 +84,6 @@ async function inventoryRequest<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const routeTemplate = (`/inventory${path}`)
-    .split("?")[0]
-    .replace(/\/products\/\d+$/, "/products/:id");
-  const method = options.method || "GET";
-  const started = performance.now();
-
   let response: Response;
 
   try {
@@ -96,34 +92,10 @@ async function inventoryRequest<T>(
       headers,
     });
   } catch {
-    track("api_request_failed", {
-      route_template: routeTemplate,
-      method,
-      failure_kind: "network",
-      duration_ms: performance.now() - started,
-    });
     throw new InventoryApiError(
       "No se pudo conectar con el servidor.",
       0
     );
-  }
-
-  const duration = performance.now() - started;
-
-  track("api_latency_recorded", {
-    route_template: routeTemplate,
-    method,
-    status_family: `${Math.floor(response.status / 100)}xx`,
-    duration_ms: duration,
-  });
-
-  if (response.status >= 500) {
-    track("api_request_failed", {
-      route_template: routeTemplate,
-      method,
-      failure_kind: "server_5xx",
-      duration_ms: duration,
-    });
   }
 
   const data = await response.json().catch(() => null);
@@ -155,15 +127,22 @@ export function fetchInventoryOrders() {
   return inventoryRequest<InventoryOrder[]>("/orders");
 }
 
+export type InboundOrderResult = InventoryOrder & {
+  unit_cost?: number | string | null;
+  supplier_key?: string | null;
+  baseline_unit_cost?: number | null;
+  variance_pct?: number | null;
+};
+
 export function createInboundOrder(data: InboundData) {
-  return inventoryRequest<InventoryOrder>("/orders/inbound", {
+  return inventoryRequest<InboundOrderResult>("/orders/inbound", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
 export function createOutboundOrder(data: OutboundData) {
-  return inventoryRequest<InventoryOrder>("/orders/outbound", {
+  return inventoryRequest<OutboundOrderResult>("/orders/outbound", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -185,4 +164,69 @@ export function fetchLocalStock(
   return inventoryRequest<LocalStock>(
     `/products/${productId}/locations/${locationId}/stock`
   );
+}
+
+export type OutboundOrderResult = InventoryOrder & {
+  previous_stock: number;
+  current_stock: number;
+};
+
+export type WasteReason = "expired" | "kitchen_error" | "theft_suspected";
+
+function productProperties(product: Ingredient, locationId: number) {
+  return {
+    location_id: locationId,
+    country: product.country,
+    product_id: product.id,
+    product_category: product.category,
+    unit: product.unit,
+    currency: product.country === "CO" ? "COP" : "USD",
+  };
+}
+
+export function captureInboundOrder(
+  product: Ingredient, data: InboundData, created: InboundOrderResult
+) {
+  const properties = {
+    ...productProperties(product, data.location_id),
+    quantity: created.quantity,
+    inbound_order_id: created.id,
+  };
+  track("inbound_order_created", properties);
+
+  const variance = Number(created.variance_pct);
+  const cost = Number(created.unit_cost);
+  const baseline = Number(created.baseline_unit_cost);
+  if (created.supplier_key && created.variance_pct != null &&
+      created.unit_cost != null && created.baseline_unit_cost != null &&
+      Number.isFinite(variance) && Number.isFinite(cost) &&
+      Number.isFinite(baseline) && baseline > 0 && Math.abs(variance) > 10) {
+    track("ingredient_price_variance_detected", {
+      ...properties, supplier_key: created.supplier_key, unit_cost: cost,
+      baseline_unit_cost: baseline, variance_pct: variance, threshold_pct: 10,
+    });
+  }
+}
+
+export function captureOutboundOrder(
+  product: Ingredient, data: OutboundData, created: OutboundOrderResult,
+  wasteReason: WasteReason
+) {
+  const properties = {
+    ...productProperties(product, data.location_id),
+    quantity: created.quantity,
+    outbound_order_id: created.id,
+  };
+  track(data.reason === "waste" ? "stock_waste_registered" : "outbound_order_created", {
+    ...properties, reason: data.reason === "waste" ? wasteReason : "consumption",
+  });
+  const minimum = (minimums as Record<string, number>)[`${data.location_id}:${product.id}`];
+  if (Number.isFinite(minimum) && minimum > 0 &&
+      Number.isFinite(created.previous_stock) && Number.isFinite(created.current_stock) &&
+      created.previous_stock >= minimum && created.current_stock < minimum) {
+    track("stock_threshold_triggered", {
+      ...properties, quantity: created.current_stock,
+      threshold_quantity: minimum, previous_stock: created.previous_stock,
+    });
+  }
 }

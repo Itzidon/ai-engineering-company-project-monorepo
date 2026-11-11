@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://brasaland.example/schema/telemetry/event-schemas-v1.json",
   "title": "Brasaland — Telemetry event envelope and strict event allowlists",
-  "description": "Contrato de diseño v1.0.0. NO constituye implementación de instrumentación. Se valida uno de los 28 eventos mediante oneOf; campos fuera del allowlist se rechazan.",
+  "description": "Contrato v1.0.0 compartido por la captura frontend y el receptor HTTP. Se valida uno de los 28 eventos mediante oneOf; campos fuera del allowlist se rechazan. El catalogo no implica que todos los eventos esten instrumentados.",
   "oneOf": [
     {
       "$ref": "#/definitions/inbound_order_created"
@@ -198,7 +198,8 @@
             "supplier_key": {
               "type": "string",
               "description": "Identificador estable no personal del proveedor, derivado de catálogo.",
-              "maxLength": 160
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
             },
             "unit_cost": {
               "type": "number",
@@ -1101,7 +1102,8 @@
             "supplier_key": {
               "type": "string",
               "description": "Identificador estable del proveedor.",
-              "maxLength": 160
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
             },
             "unit_cost": {
               "type": "number",
@@ -2718,7 +2720,8 @@
             "error_fingerprint": {
               "type": "string",
               "description": "Huella irreversible de tipo/módulo/stack saneado.",
-              "maxLength": 160
+              "maxLength": 64,
+              "pattern": "^(window_error|unhandled_rejection|[a-f0-9]{64})$"
             },
             "route_template": {
               "type": "string",
@@ -2903,7 +2906,8 @@
             "supplier_key": {
               "type": "string",
               "description": "ID normalizado de proveedor, no email de contacto.",
-              "maxLength": 160
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
             },
             "country": {
               "type": "string",

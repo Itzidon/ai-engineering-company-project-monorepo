@@ -1,19 +1,23 @@
+import json
 import logging
-import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field
+from jsonschema import Draft7Validator, FormatChecker
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 logger = logging.getLogger(__name__)
 
-TELEMETRY_ENDPOINT = os.getenv(
-    "TELEMETRY_ENDPOINT",
-    "http://localhost:8000/telemetry/events",
+CONTRACT = json.loads(
+    (Path(__file__).resolve().parents[3] / "docs/telemetry/event-schemas.json")
+    .read_text(encoding="utf-8")
 )
+validator = Draft7Validator(CONTRACT, format_checker=FormatChecker())
+
 
 class TelemetryEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -29,8 +33,18 @@ class TelemetryEvent(BaseModel):
     requestId: UUID
     properties: dict[str, Any]
 
+    @model_validator(mode="after")
+    def validate_contract(self):
+        if not validator.is_valid(self.model_dump(mode="json")):
+            raise ValueError("Invalid telemetry contract")
+        return self
+
+
 class TelemetryBatch(BaseModel):
-    events: list[TelemetryEvent]
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[TelemetryEvent] = Field(min_length=1, max_length=20)
+
 
 @router.post("/events")
 def receive_events(batch: TelemetryBatch):

@@ -8,6 +8,7 @@ import {
   fetchIngredient,
   fetchLocalStock,
   createOutboundOrder,
+  captureOutboundOrder,
   type Ingredient,
 } from "../../../../../lib/inventory";
 
@@ -44,8 +45,6 @@ export default function OutboundPage() {
       return;
     }
 
-    setAuthenticated(true);
-
     if (!trackedFormVisit.current) {
       trackedFormVisit.current = true;
       track("outbound_order_form_started", {
@@ -65,25 +64,23 @@ export default function OutboundPage() {
 
         if (id && data.some(p => String(p.id) === id)) {
           setIngredientId(id);
+          setLoadingStock(true);
         }
       })
       .catch(err => setError(
         err instanceof Error ? err.message :
         "No se pudieron cargar los ingredientes."
       ))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setAuthenticated(true);
+        setLoading(false);
+      });
   }, [router]);
 
   useEffect(() => {
-    if (!ingredientId) {
-      setSelected(null);
-      return;
-    }
+    if (!ingredientId) return;
 
     let active = true;
-    setLoadingStock(true);
-    setSelected(null);
-    setStockError("");
 
     Promise.all([
       fetchIngredient(Number(ingredientId)),
@@ -141,46 +138,19 @@ export default function OutboundPage() {
         location_id: Number(locationId),
       });
 
-      if (reason === "consumption") {
-        track("outbound_order_created", {
-          location_id: Number(locationId),
-          country: selected.country,
-          product_id: selected.id,
-          product_category: selected.category,
-          quantity: amount,
-          unit: selected.unit,
-          currency: selected.country === "CO" ? "COP" : "USD",
-          outbound_order_id: created.id,
-          reason: "consumption",
-        });
-      }
-
-      if (reason === "waste") {
-        track("stock_waste_registered", {
-          location_id: Number(locationId),
-          country: selected.country,
-          product_id: selected.id,
-          product_category: selected.category,
-          quantity: amount,
-          unit: selected.unit,
-          currency: selected.country === "CO" ? "COP" : "USD",
-          outbound_order_id: created.id,
-          reason: wasteReason,
-        });
-      }
+      captureOutboundOrder(selected, {
+        ingredient_id: selected.id, quantity: amount, reason,
+        location_id: Number(locationId),
+      }, created, wasteReason);
 
       setSuccess("Salida registrada correctamente.");
       setQuantity("");
 
-      // Consultar de nuevo el stock real tras la salida.
-      const [updated, local] = await Promise.all([
-        fetchIngredient(selected.id),
-        fetchLocalStock(selected.id, Number(locationId)),
-      ]);
       setSelected({
-        ...updated,
-        current_stock: local.current_stock,
+        ...selected,
+        current_stock: created.current_stock,
       });
+
     } catch (err) {
       setError(err instanceof Error
         ? err.message
@@ -246,6 +216,9 @@ export default function OutboundPage() {
               value={ingredientId}
               onChange={e => {
                 setIngredientId(e.target.value);
+                setSelected(null);
+                setLoadingStock(Boolean(e.target.value));
+                setStockError("");
                 setError("");
                 setSuccess("");
               }}
@@ -352,7 +325,12 @@ export default function OutboundPage() {
             <select
               style={field}
               value={locationId}
-              onChange={e => setLocationId(e.target.value)}
+              onChange={e => {
+                setLocationId(e.target.value);
+                setSelected(null);
+                setLoadingStock(Boolean(ingredientId));
+                setStockError("");
+              }}
             >
               {Array.from({ length: 14 }, (_, i) => (
                 <option key={i + 1} value={i + 1}>

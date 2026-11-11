@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   fetchIngredients,
   createInboundOrder,
+  captureInboundOrder,
   type Ingredient,
 } from "../../../../../lib/inventory";
 
@@ -23,6 +24,7 @@ export default function InboundPage() {
   const [ingredientId, setIngredientId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [supplier, setSupplier] = useState("");
+  const [unitCost, setUnitCost] = useState("");
   const [locationId, setLocationId] = useState("1");
 
   const [error, setError] = useState("");
@@ -35,8 +37,6 @@ export default function InboundPage() {
       router.replace("/login");
       return;
     }
-
-    setAuthenticated(true);
 
     if (!trackedFormVisit.current) {
       trackedFormVisit.current = true;
@@ -66,7 +66,10 @@ export default function InboundPage() {
           ? err.message
           : "No se pudieron cargar los ingredientes.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setAuthenticated(true);
+        setLoading(false);
+      });
   }, [router]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -87,6 +90,15 @@ export default function InboundPage() {
       return;
     }
 
+    const price = unitCost.trim() === ""
+      ? undefined
+      : Number(unitCost);
+
+    if (price !== undefined && (!Number.isFinite(price) || price <= 0)) {
+      setError("Introduce un precio unitario válido.");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -94,6 +106,7 @@ export default function InboundPage() {
         ingredient_id: Number(ingredientId),
         quantity: amount,
         supplier_name: supplier.trim(),
+        unit_cost: price,
         location_id: location,
       });
 
@@ -102,16 +115,10 @@ export default function InboundPage() {
       );
 
       if (product) {
-        track("inbound_order_created", {
-          location_id: location,
-          country: product.country,
-          product_id: product.id,
-          product_category: product.category,
-          quantity: amount,
-          unit: product.unit,
-          currency: product.country === "CO" ? "COP" : "USD",
-          inbound_order_id: created.id,
-        });
+        captureInboundOrder(product, {
+          ingredient_id: product.id, quantity: amount, supplier_name: supplier.trim(),
+          location_id: location, unit_cost: price,
+        }, created);
       }
 
       setSuccess("Entrega registrada correctamente.");
@@ -119,6 +126,7 @@ export default function InboundPage() {
       setIngredientId("");
       setQuantity("");
       setSupplier("");
+      setUnitCost("");
       setLocationId("1");
     } catch (err) {
       setError(err instanceof Error
@@ -237,6 +245,19 @@ export default function InboundPage() {
               value={supplier}
               onChange={(e) => setSupplier(e.target.value)}
               required
+            />
+          </label>
+
+          <label style={labelStyle}>
+            Precio unitario (opcional, COP o USD)
+            <input
+              style={fieldStyle}
+              type="number"
+              min="0.0001"
+              step="any"
+              value={unitCost}
+              onChange={(e) => setUnitCost(e.target.value)}
+              placeholder="Ej.: 12000"
             />
           </label>
 
