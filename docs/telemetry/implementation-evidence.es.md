@@ -7,9 +7,9 @@ Título propuesto del PR: `feat: telemetry event capture`
 
 Se implementó captura frontend para los seis eventos de inventario y los eventos transversales instrumentados. El esquema compartido contiene el catálogo de 28 tipos; esto no implica que todos estén instrumentados. La allowlist del cliente y el esquema JSON formal filtran tipos, propiedades, tipos de valores y combinaciones país/moneda. El endpoint `POST /telemetry/events` valida UUID, fecha, versión, propiedades y lotes de 1 a 20 eventos; responde `{ "received": n }` con HTTP 200 para lotes válidos y 422 para inválidos.
 
-La cola envía como máximo 20 eventos tras 10 segundos o al alcanzar el lote máximo; en descargas intenta `sendBeacon`, y si no se acepta mantiene el lote para `fetch` con `keepalive`. Se reintentan errores de red, timeout, 429 y 5xx con backoff limitado. Los lotes no se descartan tras agotarse los reintentos. Los eventos rechazados permanentemente por 4xx distintos de 429 se descartan.
+La cola envía como máximo 20 eventos tras 10 segundos o al alcanzar el lote máximo; en descargas intenta `sendBeacon`, y si no se acepta mantiene el lote para `fetch` con `keepalive`. Se reintentan errores de red, timeout, 429 y 5xx con backoff limitado. Los lotes se descartan tras agotar el envío inicial y tres reintentos. Los eventos rechazados permanentemente por 4xx distintos de 429 se descartan.
 
-La instrumentación transversal captura navegación, latencia y errores de API, errores no controlados y rechazos de promesas. Normaliza rutas conocidas y descarta rutas no reconocidas; no transmite query strings, mensajes de error, tokens ni propiedades no declaradas. `userId` es `null`: no se implementa una pseudonimización HMAC segura.
+La instrumentación transversal captura navegación, latencia y errores de API, errores no controlados y rechazos de promesas. Normaliza rutas conocidas y descarta rutas no reconocidas; no transmite query strings, mensajes de error, tokens ni propiedades no declaradas. `userId` se obtiene de un seudónimo HMAC-SHA256 generado por el backend cuando existe una sesión autenticada. Sin identificación disponible, es `null`.
 
 ## Seis eventos de inventario
 
@@ -28,7 +28,7 @@ No hay una pantalla de edición directa de stock en el inventario. El evento sol
 
 ## Privacidad y datos
 
-No se incluyen contraseñas, emails, nombres, motivos de error libres ni JWT. Los datos personales operativos requeridos para crear una orden (por ejemplo, el proveedor) no se copian al evento. `supplier_key` se acepta solo con formato hexadecimal SHA-256 de 64 caracteres. El identificador de sesión es aleatorio. `userId` se envía como `null` hasta disponer de una clave HMAC gestionada correctamente.
+No se incluyen contraseñas, emails, nombres, motivos de error libres ni JWT. Los datos personales operativos requeridos para crear una orden (por ejemplo, el proveedor) no se copian al evento. `supplier_key` se acepta solo con formato hexadecimal SHA-256 de 64 caracteres. El identificador de sesión es aleatorio. `userId` se genera mediante HMAC-SHA256 en el backend y se conserva en sessionStorage. No se envían nombres, correos ni tokens como identificador.
 
 ## Evidencia local
 
@@ -44,13 +44,13 @@ cd uis/application && npx eslint lib/telemetry.ts lib/telemetry-capture.ts lib/i
 cd uis/application && npm run build
 ```
 
-Estado observado durante la implementación: pytest completo, 193 pruebas aprobadas y 91,09 % de cobertura Python; Jest completo, 74 pruebas aprobadas y cobertura por encima del umbral del 70 % para los módulos frontend instrumentados; TypeScript, lint focalizado y compilación Next de producción aprobados. Se recibió HTTP 200 para cada uno de los seis tipos obligatorios.
+Estado observado durante la implementación: pytest completo, 195 pruebas aprobadas y 91,15 % de cobertura Python; Jest completo, 74 pruebas aprobadas y cobertura por encima del umbral del 70 % para los módulos frontend instrumentados; TypeScript, lint focalizado y compilación Next de producción aprobados. Se recibió HTTP 200 para cada uno de los seis tipos obligatorios.
 
 La prueba Playwright de escritorio/móvil está preparada en `uis/application/tests/telemetry.spec.ts`. No pudo ejecutarse en este contenedor: Chromium requiere bibliotecas del sistema, incluida `libglib-2.0.so.0`, que no está instalada. No se presenta como evidencia aprobada.
 
-## Pendiente antes del PR
+## Limitaciones y próximos pasos
 
 - Ejecutar `uis/application/tests/telemetry.spec.ts` en un entorno con dependencias de Chromium instaladas.
 - Revisar y actualizar Next.js: `npm audit --omit=dev` reporta una vulnerabilidad crítica en Next.js 16.3.8 y propone 16.4.6. No se aplicó una actualización de dependencias dentro de este alcance.
 - La telemetría usa envío de mejor esfuerzo en el navegador; no se implementaron almacenamiento ni reporting, que quedan fuera del proyecto solicitado.
-- Revisar `git status` y añadir selectivamente los archivos del hito. No incluir archivos `.env`, `*.zip` ni informes generados. No se hizo commit, push ni se creó PR.
+- Revisar `git status` y añadir selectivamente los archivos del hito. No incluir archivos `.env`, `*.zip` ni informes generados. El código está publicado en el Pull Request #6 contra main.
