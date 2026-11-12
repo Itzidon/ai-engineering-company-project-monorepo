@@ -189,3 +189,105 @@ def receive_events(
         "stored": stored,
         "rejected": rejected,
     }
+
+
+# Reporte tecnico de telemetria
+import threading
+import time
+from datetime import timedelta, timezone
+
+from fastapi import Query
+
+from services.telemetry.analysis import (
+    events_per_day,
+    error_rate_by_service,
+    latency_by_route,
+)
+
+_REPORT_CACHE = {}
+_REPORT_LOCK = threading.Lock()
+_REPORT_TTL = 60
+
+
+@router.get("/report")
+def get_telemetry_report(
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    session: Session = Depends(get_db),
+):
+    # Las fechas indicadas deben incluir zona horaria.
+    for date_value in (start_date, end_date):
+        if date_value is not None and (
+            date_value.tzinfo is None
+            or date_value.utcoffset() is None
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Las fechas deben incluir zona horaria UTC",
+            )
+
+    now = datetime.now(timezone.utc)
+    end = (end_date or now).astimezone(timezone.utc)
+    start = (
+        start_date.astimezone(timezone.utc)
+        if start_date is not None
+        else end - timedelta(days=7)
+    )
+
+    if start >= end:
+        raise HTTPException(
+            status_code=422,
+            detail="start_date debe ser anterior a end_date",
+        )
+
+    key = (
+        start_date.isoformat() if start_date else None,
+        end_date.isoformat() if end_date else None,
+    )
+
+    with _REPORT_LOCK:
+        current_time = time.monotonic()
+        cached = _REPORT_CACHE.get(key)
+
+        if cached and current_time - cached["created"] < _REPORT_TTL:
+            return cached["result"]
+
+        try:
+            result = {
+                "period": {
+                    "from": start.isoformat(),
+                    "to": end.isoformat(),
+                },
+                "metrics": {
+                    "events_per_day": events_per_day(
+                        session, start, end
+                    ),
+                    "error_rate_by_service": error_rate_by_service(
+                        session, start, end
+                    ),
+                    "latency_by_route": latency_by_route(
+                        session, start, end
+                    ),
+                },
+            }
+        except Exception as exc:
+            logger.exception("Error al generar reporte tecnico")
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo generar el reporte",
+            ) from exc
+
+        # Eliminar entradas caducadas.
+        expired = [
+            k for k, item in _REPORT_CACHE.items()
+            if current_time - item["created"] >= _REPORT_TTL
+        ]
+        for k in expired:
+            del _REPORT_CACHE[k]
+
+        _REPORT_CACHE[key] = {
+            "created": current_time,
+            "result": result,
+        }
+
+        return result
