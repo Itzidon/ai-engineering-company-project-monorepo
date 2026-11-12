@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 from datetime import datetime
@@ -9,6 +10,7 @@ from fastapi import APIRouter
 from jsonschema import Draft7Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_ENDPOINT", "/telemetry/events")
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 logger = logging.getLogger(__name__)
 
