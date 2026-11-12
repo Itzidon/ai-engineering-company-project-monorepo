@@ -4,6 +4,8 @@ from services.api.auth.password_reset import (
     reset_user_password,
     send_reset_email,
 )
+import hashlib
+import hmac
 from resend.exceptions import ResendError
 from pydantic import EmailStr, Field
 import logging
@@ -16,6 +18,7 @@ from services.api.auth.models import Profile, Role
 from services.api.auth.security import (
     create_access_token,
     get_current_user,
+    get_secret_key,
     verify_password,
 )
 
@@ -25,6 +28,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+    telemetry_user_id: str
 
 
 class CurrentUserResponse(BaseModel):
@@ -49,10 +53,16 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
         )
 
     token = create_access_token(user["id"])
+    pseudonym = hmac.new(
+        get_secret_key().encode("utf-8"),
+        f"brasaland-telemetry:{user['id']}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
     return {
         "access_token": token,
         "token_type": "bearer",
+        "telemetry_user_id": pseudonym,
     }
 
 

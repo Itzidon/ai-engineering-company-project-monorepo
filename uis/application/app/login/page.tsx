@@ -51,6 +51,10 @@ function LoginForm() {
         "brasaland_telemetry_session",
         crypto.randomUUID()
       );
+      if (typeof data.telemetry_user_id === "string" &&
+          /^[a-f0-9]{64}$/.test(data.telemetry_user_id)) {
+        sessionStorage.setItem("brasaland_telemetry_user", data.telemetry_user_id);
+      }
       router.replace("/suppliers");
     } catch {
       setError("No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.");

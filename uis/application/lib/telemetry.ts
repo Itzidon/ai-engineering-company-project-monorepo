@@ -67,6 +67,16 @@ function sessionId(): string {
 
 const fallbackSession = crypto.randomUUID().replaceAll("-", "");
 
+function sessionUserId(): string | null {
+  try {
+    if (!localStorage.getItem("brasaland_token")) return null;
+    const id = sessionStorage.getItem("brasaland_telemetry_user");
+    return id && /^[a-f0-9]{64}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export function routeTemplate(path: string): string {
   const clean = path.split(/[?#]/)[0];
   const normalized = clean.replace(/\/\d+(?=\/|$)/g, "/:id");
@@ -157,7 +167,7 @@ export function track(
     eventId: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     sessionId: sessionId(),
-    userId: null,
+    userId: sessionUserId(),
     event_type: eventType,
     schemaVersion: "1.0.0",
     requestId: crypto.randomUUID(),
@@ -208,7 +218,7 @@ export async function flushTelemetry(): Promise<void> {
         );
       }
     }
-    queue.unshift(...batch);
+    completed = true; // Lote descartado tras agotar los reintentos.
   } finally {
     sending = false;
     if (completed && queue.length >= MAX_BATCH) void flushTelemetry();

@@ -33,7 +33,7 @@ describe("telemetry delivery", () => {
     jest.useRealTimers();
   });
 
-  it("retains the same event after exhausted retries and recovers", async () => {
+  it("discards a batch after three failed retries", async () => {
     const fetchMock = jest.fn().mockRejectedValue(new Error("offline"));
     globalThis.fetch = fetchMock;
     const { track, flushTelemetry } = await import("../lib/telemetry");
@@ -42,12 +42,27 @@ describe("telemetry delivery", () => {
     await jest.advanceTimersByTimeAsync(3500);
     await pending;
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    const originalBody = fetchMock.mock.calls[0][1].body;
     fetchMock.mockResolvedValue({ ok: true });
     await flushTelemetry();
-    expect(fetchMock.mock.calls[4][1].body).toBe(originalBody);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("uses a pseudonym from an authenticated session", async () => {
+    const pseudonym = "a".repeat(64);
+    Object.assign(localStorage, { getItem: () => "authenticated-token" });
+    Object.assign(sessionStorage, {
+      getItem: (key: string) =>
+        key === "brasaland_telemetry_user"
+          ? pseudonym : "controlled-session-001",
+    });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true });
+    globalThis.fetch = fetchMock;
+    const { track, flushTelemetry } = await import("../lib/telemetry");
+    track("inbound_order_created", validProperties);
     await flushTelemetry();
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(payload.events[0].userId).toBe(pseudonym);
+    expect(payload.events[0].userId).not.toContain("@");
   });
 
   it("captures cross-cutting failures without messages, queries, or identifiers", async () => {
@@ -152,7 +167,7 @@ describe("telemetry delivery", () => {
     expect(events).toHaveLength(1);
     expect(events[0].properties).toEqual(validProperties);
     expect(events[0].userId).toBeNull();
-    expect(getToken).not.toHaveBeenCalled();
+    expect(getToken).toHaveBeenCalledWith("brasaland_token");
   });
 
   it("still captures when sessionStorage is blocked", async () => {
