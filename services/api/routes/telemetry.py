@@ -1,3 +1,4 @@
+
 import os
 import json
 import logging
@@ -6,21 +7,48 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from jsonschema import Draft7Validator, FormatChecker
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    MetaData,
+    Numeric,
+    String,
+    Table,
+    insert,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import Session
 
-TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_ENDPOINT", "/telemetry/events")
+from services.database import get_db
+
+TELEMETRY_ENDPOINT = os.getenv(
+    "TELEMETRY_ENDPOINT", "/telemetry/events"
+)
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 logger = logging.getLogger(__name__)
 
 CONTRACT = json.loads(
-    (Path(__file__).resolve().parents[3] / "docs/telemetry/event-schemas.json")
-    .read_text(encoding="utf-8")
+    (
+        Path(__file__).resolve().parents[3]
+        / "docs/telemetry/event-schemas.json"
+    ).read_text(encoding="utf-8")
 )
-validator = Draft7Validator(CONTRACT, format_checker=FormatChecker())
+validator = Draft7Validator(
+    CONTRACT, format_checker=FormatChecker()
+)
 
 
+# Modelo original: se conserva sin modificar.
 class TelemetryEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -37,20 +65,127 @@ class TelemetryEvent(BaseModel):
 
     @model_validator(mode="after")
     def validate_contract(self):
-        if not validator.is_valid(self.model_dump(mode="json")):
+        if not validator.is_valid(
+            self.model_dump(mode="json")
+        ):
             raise ValueError("Invalid telemetry contract")
         return self
 
 
+# Recibimos eventos sin validarlos todos de golpe.
 class TelemetryBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    events: list[TelemetryEvent] = Field(min_length=1, max_length=20)
+    events: list[Any] = Field(
+        min_length=1, max_length=20
+    )
+
+
+# Tabla de Supabase ya creada con SQL.
+TELEMETRY_TABLE = Table(
+    "telemetry_events",
+    MetaData(),
+    Column("timestamp", DateTime(timezone=True)),
+    Column("service", String),
+    Column("event_type", String),
+    Column("level", String),
+    Column("value", Numeric),
+    Column("message", String),
+    Column(
+        "tags",
+        JSON().with_variant(JSONB(), "postgresql"),
+    ),
+)
+
+
+def event_to_row(event: TelemetryEvent) -> dict:
+    event_type = event.event_type
+
+    if event_type in {
+        "frontend_error_captured",
+        "api_request_failed",
+        "database_query_slow_detected",
+    }:
+        level = "error"
+    elif "failed" in event_type or "rejected" in event_type:
+        level = "warn"
+    else:
+        level = "info"
+
+    service = (
+        "api"
+        if event_type.startswith(("api_", "database_"))
+        else "backoffice"
+    )
+
+    quantity = event.properties.get("quantity")
+    value = (
+        quantity
+        if isinstance(quantity, (int, float))
+        and not isinstance(quantity, bool)
+        else None
+    )
+
+    return {
+        "timestamp": event.timestamp,
+        "service": service,
+        "event_type": event_type,
+        "level": level,
+        "value": value,
+        "message": None,
+        "tags": event.properties,
+    }
 
 
 @router.post("/events")
-def receive_events(batch: TelemetryBatch):
-    logger.info("Eventos recibidos: %s", len(batch.events))
-    for event in batch.events:
-        logger.info("Tipo: %s", event.event_type)
-    return {"received": len(batch.events)}
+def receive_events(
+    batch: TelemetryBatch,
+    session: Session = Depends(get_db),
+):
+    received = len(batch.events)
+    rejected = 0
+    valid_rows = []
+
+    for raw_event in batch.events:
+        try:
+            event = TelemetryEvent.model_validate(
+                raw_event
+            )
+        except ValidationError:
+            rejected += 1
+            continue
+
+        valid_rows.append(event_to_row(event))
+
+    stored = 0
+
+    if valid_rows:
+        try:
+            # Un solo INSERT para todo el lote válido.
+            session.execute(
+                insert(TELEMETRY_TABLE).values(valid_rows)
+            )
+            session.commit()
+            stored = len(valid_rows)
+        except Exception as exc:
+            session.rollback()
+            logger.exception(
+                "Error guardando telemetria"
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudieron guardar los eventos",
+            ) from exc
+
+    logger.info(
+        "Telemetria: received=%s stored=%s rejected=%s",
+        received,
+        stored,
+        rejected,
+    )
+
+    return {
+        "received": received,
+        "stored": stored,
+        "rejected": rejected,
+    }

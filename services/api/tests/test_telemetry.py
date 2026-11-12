@@ -8,6 +8,7 @@ from sqlmodel import SQLModel, Session, create_engine, select
 
 from services.api.auth.security import get_current_user
 from services.api.main import app
+from services.api.routes.telemetry import TELEMETRY_TABLE
 from services.database import get_db
 from services.models import Ingredient, IngredientEntry, IngredientExit
 from services.price_variance import detect_price_variance
@@ -20,6 +21,7 @@ def client(monkeypatch):
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     SQLModel.metadata.create_all(engine)
+    TELEMETRY_TABLE.create(engine)
     with Session(engine) as session:
         session.add(Ingredient(
             id=1, name="Controlled ingredient", sku="CONTROL-1", unit="kg",
@@ -71,7 +73,7 @@ def test_six_events_return_http_200(client, event_type, properties):
     response = client[0].post(
         "/telemetry/events", json={"events": [event(event_type, **properties)]})
     assert response.status_code == 200
-    assert response.json() == {"received": 1}
+    assert response.json() == {"received": 1, "stored": 1, "rejected": 0}
 
 
 @pytest.mark.parametrize("change", [
@@ -85,7 +87,8 @@ def test_invalid_envelope_is_rejected(client, change):
     payload = event(inbound_order_id=1)
     payload.update(change)
     response = client[0].post("/telemetry/events", json={"events": [payload]})
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json() == {"received": 1, "stored": 0, "rejected": 1}
     assert "person@example.com" not in response.text
 
 
@@ -97,15 +100,17 @@ def test_batch_limits_and_country_currency(client):
     assert client[0].post("/telemetry/events",
                           json={"events": [payload] * 20}).status_code == 200
     payload["properties"]["currency"] = "USD"
-    assert client[0].post("/telemetry/events",
-                          json={"events": [payload]}).status_code == 422
+    response = client[0].post("/telemetry/events", json={"events": [payload]})
+    assert response.status_code == 200
+    assert response.json() == {"received": 1, "stored": 0, "rejected": 1}
 
 
 @pytest.mark.parametrize("supplier_key", ["PrivateName", "person@example.com"])
 def test_supplier_identifier_cannot_carry_names_or_email(client, supplier_key):
     payload = event(inbound_order_id=1, supplier_key=supplier_key)
-    assert client[0].post("/telemetry/events",
-                          json={"events": [payload]}).status_code == 422
+    response = client[0].post("/telemetry/events", json={"events": [payload]})
+    assert response.status_code == 200
+    assert response.json() == {"received": 1, "stored": 0, "rejected": 1}
 
 
 def test_inventory_routes_prices_and_rejection_without_stock_mutation(client):
@@ -153,3 +158,35 @@ def test_price_threshold(current, baseline, detected):
     variance, result = detect_price_variance(current, baseline)
     assert variance == current - baseline
     assert result is detected
+
+
+def test_mixed_batch_partial_storage(client):
+    http, session = client
+
+    valid_inbound = event(inbound_order_id=1)
+    valid_outbound = event(
+        event_type="outbound_order_created",
+        outbound_order_id=1,
+        reason="consumption",
+    )
+    invalid = {**valid_inbound, "eventId": "invalid"}
+
+    response = http.post(
+        "/telemetry/events",
+        json={"events": [valid_inbound, invalid, valid_outbound]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "received": 3,
+        "stored": 2,
+        "rejected": 1,
+    }
+
+    rows = session.execute(TELEMETRY_TABLE.select()).mappings().all()
+    assert len(rows) == 2
+    assert {row["event_type"] for row in rows} == {
+        "inbound_order_created",
+        "outbound_order_created",
+    }
+    assert all(row["tags"]["location_id"] == 1 for row in rows)
