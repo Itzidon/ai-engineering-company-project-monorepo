@@ -1,0 +1,44 @@
+services:
+  interfaces:
+    build:
+      context: .
+      dockerfile: uis/Dockerfile
+    environment:
+      API_URL: http://backend:8000
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - .:/app
+      - website_modules:/app/uis/website/node_modules
+      - backoffice_modules:/app/uis/backoffice/node_modules
+      - website_next:/app/uis/website/.next
+      - backoffice_next:/app/uis/backoffice/.next
+    depends_on:
+      - backend
+    networks:
+      - brasaland
+
+  backend:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - .:/app
+    networks:
+      - brasaland
+
+networks:
+  brasaland:
+    driver: bridge
+
+volumes:
+  website_modules:
+  backoffice_modules:
+  website_next:
+  backoffice_next:
