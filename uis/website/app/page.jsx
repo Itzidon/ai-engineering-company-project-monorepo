@@ -1,0 +1,1 @@
+export default function Home() {return <main><h1>Bienvenido a Brasaland</h1><p>Sitio web de la empresa - Docker actualizado</p></main>}

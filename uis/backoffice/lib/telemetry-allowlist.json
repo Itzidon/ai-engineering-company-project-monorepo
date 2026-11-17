@@ -1,0 +1,180 @@
+{
+  "inbound_order_created": [
+    "location_id",
+    "country",
+    "product_id",
+    "product_category",
+    "quantity",
+    "unit",
+    "currency",
+    "inbound_order_id",
+    "supplier_key",
+    "unit_cost"
+  ],
+  "outbound_order_created": [
+    "location_id",
+    "country",
+    "product_id",
+    "product_category",
+    "quantity",
+    "unit",
+    "currency",
+    "outbound_order_id",
+    "reason"
+  ],
+  "stock_waste_registered": [
+    "location_id",
+    "country",
+    "product_id",
+    "product_category",
+    "quantity",
+    "unit",
+    "currency",
+    "outbound_order_id",
+    "reason"
+  ],
+  "stock_threshold_triggered": [
+    "location_id",
+    "country",
+    "product_id",
+    "product_category",
+    "quantity",
+    "unit",
+    "currency",
+    "threshold_quantity",
+    "previous_stock",
+    "outbound_order_id"
+  ],
+  "direct_stock_edit_rejected": [
+    "location_id",
+    "country",
+    "product_id",
+    "product_category",
+    "quantity",
+    "unit",
+    "currency",
+    "attempted_operation",
+    "rejection_code"
+  ],
+  "ingredient_price_variance_detected": [
+    "location_id",
+    "country",
+    "product_id",
+    "product_category",
+    "quantity",
+    "unit",
+    "currency",
+    "inbound_order_id",
+    "supplier_key",
+    "unit_cost",
+    "baseline_unit_cost",
+    "variance_pct",
+    "threshold_pct"
+  ],
+  "inventory_product_viewed": [
+    "product_id",
+    "country",
+    "entry_point"
+  ],
+  "inventory_filters_applied": [
+    "filter_type",
+    "filter_value",
+    "result_count"
+  ],
+  "inbound_order_form_started": [
+    "form_route",
+    "source"
+  ],
+  "inbound_order_validation_failed": [
+    "field_key",
+    "validation_code",
+    "form_route"
+  ],
+  "inbound_order_submission_failed": [
+    "status_code",
+    "error_code",
+    "retryable"
+  ],
+  "outbound_order_form_started": [
+    "form_route",
+    "source"
+  ],
+  "outbound_order_validation_failed": [
+    "field_key",
+    "validation_code",
+    "available_stock_bucket"
+  ],
+  "outbound_order_submission_failed": [
+    "status_code",
+    "error_code",
+    "product_id",
+    "location_id"
+  ],
+  "inventory_order_history_viewed": [
+    "result_count",
+    "entry_point"
+  ],
+  "inventory_workflow_abandoned": [
+    "form_kind",
+    "last_step",
+    "elapsed_seconds"
+  ],
+  "auth_login_succeeded": [
+    "auth_method",
+    "role_key"
+  ],
+  "auth_login_failed": [
+    "failure_code",
+    "attempt_bucket"
+  ],
+  "session_expired": [
+    "route_template",
+    "session_age_bucket"
+  ],
+  "auth_access_denied": [
+    "route_template",
+    "status_code",
+    "denial_code"
+  ],
+  "api_latency_recorded": [
+    "route_template",
+    "method",
+    "status_family",
+    "duration_ms"
+  ],
+  "page_load_recorded": [
+    "route_template",
+    "load_ms",
+    "navigation_kind"
+  ],
+  "database_query_slow_detected": [
+    "query_fingerprint",
+    "duration_ms",
+    "db_role"
+  ],
+  "frontend_error_captured": [
+    "error_fingerprint",
+    "route_template",
+    "severity"
+  ],
+  "api_request_failed": [
+    "route_template",
+    "method",
+    "failure_kind",
+    "duration_ms"
+  ],
+  "supplier_selection_changed": [
+    "supplier_key",
+    "country",
+    "product_category"
+  ],
+  "inventory_country_switched": [
+    "selected_country",
+    "result_count"
+  ],
+  "inventory_stock_warning_viewed": [
+    "product_id",
+    "location_id",
+    "warning_level"
+  ]
+}

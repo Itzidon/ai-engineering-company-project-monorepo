@@ -1,0 +1,3118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://brasaland.example/schema/telemetry/event-schemas-v1.json",
+  "title": "Brasaland — Telemetry event envelope and strict event allowlists",
+  "description": "Contrato v1.0.0 compartido por la captura frontend y el receptor HTTP. Se valida uno de los 28 eventos mediante oneOf; campos fuera del allowlist se rechazan. El catalogo no implica que todos los eventos esten instrumentados.",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/inbound_order_created"
+    },
+    {
+      "$ref": "#/definitions/outbound_order_created"
+    },
+    {
+      "$ref": "#/definitions/stock_waste_registered"
+    },
+    {
+      "$ref": "#/definitions/stock_threshold_triggered"
+    },
+    {
+      "$ref": "#/definitions/direct_stock_edit_rejected"
+    },
+    {
+      "$ref": "#/definitions/ingredient_price_variance_detected"
+    },
+    {
+      "$ref": "#/definitions/inventory_product_viewed"
+    },
+    {
+      "$ref": "#/definitions/inventory_filters_applied"
+    },
+    {
+      "$ref": "#/definitions/inbound_order_form_started"
+    },
+    {
+      "$ref": "#/definitions/inbound_order_validation_failed"
+    },
+    {
+      "$ref": "#/definitions/inbound_order_submission_failed"
+    },
+    {
+      "$ref": "#/definitions/outbound_order_form_started"
+    },
+    {
+      "$ref": "#/definitions/outbound_order_validation_failed"
+    },
+    {
+      "$ref": "#/definitions/outbound_order_submission_failed"
+    },
+    {
+      "$ref": "#/definitions/inventory_order_history_viewed"
+    },
+    {
+      "$ref": "#/definitions/inventory_workflow_abandoned"
+    },
+    {
+      "$ref": "#/definitions/auth_login_succeeded"
+    },
+    {
+      "$ref": "#/definitions/auth_login_failed"
+    },
+    {
+      "$ref": "#/definitions/session_expired"
+    },
+    {
+      "$ref": "#/definitions/auth_access_denied"
+    },
+    {
+      "$ref": "#/definitions/api_latency_recorded"
+    },
+    {
+      "$ref": "#/definitions/page_load_recorded"
+    },
+    {
+      "$ref": "#/definitions/database_query_slow_detected"
+    },
+    {
+      "$ref": "#/definitions/frontend_error_captured"
+    },
+    {
+      "$ref": "#/definitions/api_request_failed"
+    },
+    {
+      "$ref": "#/definitions/supplier_selection_changed"
+    },
+    {
+      "$ref": "#/definitions/inventory_country_switched"
+    },
+    {
+      "$ref": "#/definitions/inventory_stock_warning_viewed"
+    }
+  ],
+  "definitions": {
+    "inbound_order_created": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inbound_order_created"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "location_id": {
+              "type": "integer",
+              "description": "ID del local donde ocurrió el hecho; 1 a 14.",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "country": {
+              "type": "string",
+              "description": "País del local, independiente del idioma de la interfaz.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "product_id": {
+              "type": "integer",
+              "description": "ID SQL del ingrediente (Ingredient), llamado Product en el briefing.",
+              "minimum": 1
+            },
+            "product_category": {
+              "type": "string",
+              "description": "Categoría del ingrediente, equivalente a Ingredient.category.",
+              "enum": [
+                "meat",
+                "produce",
+                "sauce",
+                "beverage",
+                "packaging",
+                "cleaning"
+              ]
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Cantidad recibida; siempre positiva.",
+              "minimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "description": "Unidad de medida de Ingredient.unit.",
+              "enum": [
+                "kg",
+                "litro",
+                "unidad"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "description": "Moneda de origen del local: COP para CO y USD para US.",
+              "enum": [
+                "COP",
+                "USD"
+              ]
+            },
+            "inbound_order_id": {
+              "type": "integer",
+              "description": "ID persistido de IngredientEntry.",
+              "minimum": 1
+            },
+            "supplier_key": {
+              "type": "string",
+              "description": "Identificador estable no personal del proveedor, derivado de catálogo.",
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "unit_cost": {
+              "type": "number",
+              "description": "Costo unitario en moneda local, cuando esté disponible.",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "location_id",
+            "country",
+            "product_id",
+            "product_category",
+            "quantity",
+            "unit",
+            "currency",
+            "inbound_order_id"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "CO"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "COP"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "US"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "USD"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Entrega de mercancía confirmada."
+    },
+    "outbound_order_created": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "outbound_order_created"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "location_id": {
+              "type": "integer",
+              "description": "ID del local donde ocurrió el hecho; 1 a 14.",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "country": {
+              "type": "string",
+              "description": "País del local, independiente del idioma de la interfaz.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "product_id": {
+              "type": "integer",
+              "description": "ID SQL del ingrediente (Ingredient), llamado Product en el briefing.",
+              "minimum": 1
+            },
+            "product_category": {
+              "type": "string",
+              "description": "Categoría del ingrediente, equivalente a Ingredient.category.",
+              "enum": [
+                "meat",
+                "produce",
+                "sauce",
+                "beverage",
+                "packaging",
+                "cleaning"
+              ]
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Cantidad realmente consumida.",
+              "minimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "description": "Unidad de medida de Ingredient.unit.",
+              "enum": [
+                "kg",
+                "litro",
+                "unidad"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "description": "Moneda de origen del local: COP para CO y USD para US.",
+              "enum": [
+                "COP",
+                "USD"
+              ]
+            },
+            "outbound_order_id": {
+              "type": "integer",
+              "description": "ID persistido de IngredientExit.",
+              "minimum": 1
+            },
+            "reason": {
+              "type": "string",
+              "description": "Para consumo, valor fijo consumption.",
+              "enum": [
+                "consumption"
+              ]
+            }
+          },
+          "required": [
+            "location_id",
+            "country",
+            "product_id",
+            "product_category",
+            "quantity",
+            "unit",
+            "currency",
+            "outbound_order_id",
+            "reason"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "CO"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "COP"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "US"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "USD"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Consumo registrado, excluyendo mermas."
+    },
+    "stock_waste_registered": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "stock_waste_registered"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "location_id": {
+              "type": "integer",
+              "description": "ID del local donde ocurrió el hecho; 1 a 14.",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "country": {
+              "type": "string",
+              "description": "País del local, independiente del idioma de la interfaz.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "product_id": {
+              "type": "integer",
+              "description": "ID SQL del ingrediente (Ingredient), llamado Product en el briefing.",
+              "minimum": 1
+            },
+            "product_category": {
+              "type": "string",
+              "description": "Categoría del ingrediente, equivalente a Ingredient.category.",
+              "enum": [
+                "meat",
+                "produce",
+                "sauce",
+                "beverage",
+                "packaging",
+                "cleaning"
+              ]
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Cantidad mermada.",
+              "minimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "description": "Unidad de medida de Ingredient.unit.",
+              "enum": [
+                "kg",
+                "litro",
+                "unidad"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "description": "Moneda de origen del local: COP para CO y USD para US.",
+              "enum": [
+                "COP",
+                "USD"
+              ]
+            },
+            "outbound_order_id": {
+              "type": "integer",
+              "description": "ID de IngredientExit.",
+              "minimum": 1
+            },
+            "reason": {
+              "type": "string",
+              "description": "Causa concreta de merma. No emitir únicamente \"waste\".",
+              "enum": [
+                "expired",
+                "kitchen_error",
+                "theft_suspected"
+              ]
+            }
+          },
+          "required": [
+            "location_id",
+            "country",
+            "product_id",
+            "product_category",
+            "quantity",
+            "unit",
+            "currency",
+            "outbound_order_id",
+            "reason"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "CO"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "COP"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "US"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "USD"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Merma de ingrediente confirmada con causa específica."
+    },
+    "stock_threshold_triggered": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "stock_threshold_triggered"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "location_id": {
+              "type": "integer",
+              "description": "ID del local donde ocurrió el hecho; 1 a 14.",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "country": {
+              "type": "string",
+              "description": "País del local, independiente del idioma de la interfaz.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "product_id": {
+              "type": "integer",
+              "description": "ID SQL del ingrediente (Ingredient), llamado Product en el briefing.",
+              "minimum": 1
+            },
+            "product_category": {
+              "type": "string",
+              "description": "Categoría del ingrediente, equivalente a Ingredient.category.",
+              "enum": [
+                "meat",
+                "produce",
+                "sauce",
+                "beverage",
+                "packaging",
+                "cleaning"
+              ]
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Stock restante en el local, no delta del movimiento.",
+              "minimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "description": "Unidad de medida de Ingredient.unit.",
+              "enum": [
+                "kg",
+                "litro",
+                "unidad"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "description": "Moneda de origen del local: COP para CO y USD para US.",
+              "enum": [
+                "COP",
+                "USD"
+              ]
+            },
+            "threshold_quantity": {
+              "type": "number",
+              "description": "Mínimo configurado para ese producto y local.",
+              "minimum": 0
+            },
+            "previous_stock": {
+              "type": "number",
+              "description": "Stock local inmediatamente anterior al movimiento.",
+              "minimum": 0
+            },
+            "outbound_order_id": {
+              "type": "integer",
+              "description": "Orden que causó el cruce.",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "location_id",
+            "country",
+            "product_id",
+            "product_category",
+            "quantity",
+            "unit",
+            "currency",
+            "threshold_quantity",
+            "previous_stock",
+            "outbound_order_id"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "CO"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "COP"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "US"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "USD"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Cruce por primera vez bajo el mínimo del producto en un local."
+    },
+    "direct_stock_edit_rejected": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "direct_stock_edit_rejected"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "location_id": {
+              "type": "integer",
+              "description": "ID del local donde ocurrió el hecho; 1 a 14.",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "country": {
+              "type": "string",
+              "description": "País del local, independiente del idioma de la interfaz.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "product_id": {
+              "type": "integer",
+              "description": "ID SQL del ingrediente (Ingredient), llamado Product en el briefing.",
+              "minimum": 1
+            },
+            "product_category": {
+              "type": "string",
+              "description": "Categoría del ingrediente, equivalente a Ingredient.category.",
+              "enum": [
+                "meat",
+                "produce",
+                "sauce",
+                "beverage",
+                "packaging",
+                "cleaning"
+              ]
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Cantidad que intentaron establecer; no un movimiento persistido.",
+              "minimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "description": "Unidad de medida de Ingredient.unit.",
+              "enum": [
+                "kg",
+                "litro",
+                "unidad"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "description": "Moneda de origen del local: COP para CO y USD para US.",
+              "enum": [
+                "COP",
+                "USD"
+              ]
+            },
+            "attempted_operation": {
+              "type": "string",
+              "description": "Tipo de manipulación rechazada.",
+              "enum": [
+                "direct_set",
+                "direct_increment",
+                "direct_decrement"
+              ]
+            },
+            "rejection_code": {
+              "type": "string",
+              "description": "Razón técnica no sensible.",
+              "enum": [
+                "read_only_stock",
+                "forbidden_direct_update"
+              ]
+            }
+          },
+          "required": [
+            "location_id",
+            "country",
+            "product_id",
+            "product_category",
+            "quantity",
+            "unit",
+            "currency",
+            "attempted_operation",
+            "rejection_code"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "CO"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "COP"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "US"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "USD"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Bloqueo explícito de intento de alterar stock fuera de orden."
+    },
+    "ingredient_price_variance_detected": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "ingredient_price_variance_detected"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "location_id": {
+              "type": "integer",
+              "description": "ID del local donde ocurrió el hecho; 1 a 14.",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "country": {
+              "type": "string",
+              "description": "País del local, independiente del idioma de la interfaz.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "product_id": {
+              "type": "integer",
+              "description": "ID SQL del ingrediente (Ingredient), llamado Product en el briefing.",
+              "minimum": 1
+            },
+            "product_category": {
+              "type": "string",
+              "description": "Categoría del ingrediente, equivalente a Ingredient.category.",
+              "enum": [
+                "meat",
+                "produce",
+                "sauce",
+                "beverage",
+                "packaging",
+                "cleaning"
+              ]
+            },
+            "quantity": {
+              "type": "number",
+              "description": "Unidades compradas en la orden cuyo precio varía.",
+              "minimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "description": "Unidad de medida de Ingredient.unit.",
+              "enum": [
+                "kg",
+                "litro",
+                "unidad"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "description": "Moneda de origen del local: COP para CO y USD para US.",
+              "enum": [
+                "COP",
+                "USD"
+              ]
+            },
+            "inbound_order_id": {
+              "type": "integer",
+              "description": "Orden confirmada.",
+              "minimum": 1
+            },
+            "supplier_key": {
+              "type": "string",
+              "description": "Identificador estable del proveedor.",
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "unit_cost": {
+              "type": "number",
+              "description": "Costo observado en moneda local.",
+              "minimum": 0
+            },
+            "baseline_unit_cost": {
+              "type": "number",
+              "description": "Referencia histórica robusta en igual moneda/unidad.",
+              "minimum": 0
+            },
+            "variance_pct": {
+              "type": "number",
+              "description": "Variación porcentual frente a baseline."
+            },
+            "threshold_pct": {
+              "type": "number",
+              "description": "Umbral aplicable, p.ej. 10.",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "location_id",
+            "country",
+            "product_id",
+            "product_category",
+            "quantity",
+            "unit",
+            "currency",
+            "inbound_order_id",
+            "supplier_key",
+            "unit_cost",
+            "baseline_unit_cost",
+            "variance_pct",
+            "threshold_pct"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "CO"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "COP"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "country": {
+                    "const": "US"
+                  }
+                },
+                "required": [
+                  "country"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "currency": {
+                    "const": "USD"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Costo unitario excede umbral frente al histórico comparable."
+    },
+    "inventory_product_viewed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inventory_product_viewed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "product_id": {
+              "type": "integer",
+              "description": "Identificador del ingrediente.",
+              "minimum": 1
+            },
+            "country": {
+              "type": "string",
+              "description": "Mercado del ingrediente.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "entry_point": {
+              "type": "string",
+              "description": "Origen de la navegación.",
+              "enum": [
+                "catalog",
+                "history",
+                "deep_link"
+              ]
+            }
+          },
+          "required": [
+            "product_id",
+            "country",
+            "entry_point"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Ficha del ingrediente visualizada."
+    },
+    "inventory_filters_applied": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inventory_filters_applied"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filter_type": {
+              "type": "string",
+              "description": "Dimensión filtrada.",
+              "enum": [
+                "country",
+                "category",
+                "stock_status"
+              ]
+            },
+            "filter_value": {
+              "type": "string",
+              "description": "Valor normalizado del filtro, nunca texto libre.",
+              "maxLength": 160
+            },
+            "result_count": {
+              "type": "integer",
+              "description": "Número de ingredientes visibles.",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "filter_type",
+            "filter_value",
+            "result_count"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Operador aplica filtros al inventario."
+    },
+    "inbound_order_form_started": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inbound_order_form_started"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "form_route": {
+              "type": "string",
+              "description": "Ruta fija de formulario.",
+              "enum": [
+                "/backoffice/inventory/orders/inbound"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "description": "Desde dónde abrió el formulario.",
+              "enum": [
+                "inventory",
+                "history",
+                "deep_link"
+              ]
+            }
+          },
+          "required": [
+            "form_route",
+            "source"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Formulario de recepción iniciado."
+    },
+    "inbound_order_validation_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inbound_order_validation_failed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "field_key": {
+              "type": "string",
+              "description": "Campo permitido con error.",
+              "enum": [
+                "ingredient_id",
+                "quantity",
+                "supplier_name",
+                "location_id"
+              ]
+            },
+            "validation_code": {
+              "type": "string",
+              "description": "Código del error; nunca el valor introducido.",
+              "enum": [
+                "required",
+                "invalid_type",
+                "out_of_range",
+                "invalid_selection"
+              ]
+            },
+            "form_route": {
+              "type": "string",
+              "description": "Ruta fija.",
+              "enum": [
+                "/backoffice/inventory/orders/inbound"
+              ]
+            }
+          },
+          "required": [
+            "field_key",
+            "validation_code",
+            "form_route"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Validación de formulario de entrada fallida."
+    },
+    "inbound_order_submission_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inbound_order_submission_failed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status_code": {
+              "type": "integer",
+              "description": "HTTP 4xx/5xx, 0 si fallo de red.",
+              "minimum": 0,
+              "maximum": 599
+            },
+            "error_code": {
+              "type": "string",
+              "description": "Código normalizado, sin mensaje bruto.",
+              "maxLength": 160
+            },
+            "retryable": {
+              "type": "boolean",
+              "description": "Si el error puede reintentarse con seguridad."
+            }
+          },
+          "required": [
+            "status_code",
+            "error_code",
+            "retryable"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Error servidor/red al guardar una entrega."
+    },
+    "outbound_order_form_started": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "outbound_order_form_started"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "form_route": {
+              "type": "string",
+              "description": "Ruta fija.",
+              "enum": [
+                "/backoffice/inventory/orders/outbound"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "description": "Origen de navegación.",
+              "enum": [
+                "inventory",
+                "history",
+                "deep_link"
+              ]
+            }
+          },
+          "required": [
+            "form_route",
+            "source"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Formulario de consumo/merma iniciado."
+    },
+    "outbound_order_validation_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "outbound_order_validation_failed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "field_key": {
+              "type": "string",
+              "description": "Campo con error.",
+              "enum": [
+                "ingredient_id",
+                "quantity",
+                "reason",
+                "location_id"
+              ]
+            },
+            "validation_code": {
+              "type": "string",
+              "description": "Código, sin valores ingresados.",
+              "enum": [
+                "required",
+                "invalid_type",
+                "out_of_range",
+                "insufficient_stock",
+                "invalid_selection"
+              ]
+            },
+            "available_stock_bucket": {
+              "type": "string",
+              "description": "Rango de stock, no valor de usuario.",
+              "enum": [
+                "zero",
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          },
+          "required": [
+            "field_key",
+            "validation_code",
+            "available_stock_bucket"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Validación de salida fallida antes de enviar."
+    },
+    "outbound_order_submission_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "outbound_order_submission_failed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status_code": {
+              "type": "integer",
+              "description": "Código HTTP o 0 sin conexión.",
+              "minimum": 0,
+              "maximum": 599
+            },
+            "error_code": {
+              "type": "string",
+              "description": "Motivo normalizado, ej. insufficient_stock.",
+              "maxLength": 160
+            },
+            "product_id": {
+              "type": "integer",
+              "description": "Ingrediente seleccionado.",
+              "minimum": 1
+            },
+            "location_id": {
+              "type": "integer",
+              "description": "Local afectado.",
+              "minimum": 1,
+              "maximum": 14
+            }
+          },
+          "required": [
+            "status_code",
+            "error_code",
+            "product_id",
+            "location_id"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "API rechaza o falla una salida."
+    },
+    "inventory_order_history_viewed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inventory_order_history_viewed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "result_count": {
+              "type": "integer",
+              "description": "Número de movimientos mostrados.",
+              "minimum": 0
+            },
+            "entry_point": {
+              "type": "string",
+              "description": "Punto de acceso.",
+              "enum": [
+                "inventory",
+                "deep_link"
+              ]
+            }
+          },
+          "required": [
+            "result_count",
+            "entry_point"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Historial de órdenes consultado."
+    },
+    "inventory_workflow_abandoned": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inventory_workflow_abandoned"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "form_kind": {
+              "type": "string",
+              "description": "Tipo de formulario.",
+              "enum": [
+                "inbound",
+                "outbound"
+              ]
+            },
+            "last_step": {
+              "type": "string",
+              "description": "Paso alcanzado.",
+              "enum": [
+                "ingredient",
+                "quantity",
+                "details",
+                "review"
+              ]
+            },
+            "elapsed_seconds": {
+              "type": "number",
+              "description": "Duración redondeada de sesión en formulario.",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "form_kind",
+            "last_step",
+            "elapsed_seconds"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Se abandona formulario con cambios no enviados."
+    },
+    "auth_login_succeeded": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "auth_login_succeeded"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "auth_method": {
+              "type": "string",
+              "description": "Tipo de autenticación.",
+              "enum": [
+                "password"
+              ]
+            },
+            "role_key": {
+              "type": "string",
+              "description": "Rol normalizado sin nombre ni email.",
+              "maxLength": 160
+            }
+          },
+          "required": [
+            "auth_method"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Login completado sin registrar credenciales."
+    },
+    "auth_login_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "auth_login_failed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "failure_code": {
+              "type": "string",
+              "description": "Razón genérica sin revelar existencia de cuentas.",
+              "enum": [
+                "invalid_credentials",
+                "account_unavailable",
+                "rate_limited",
+                "internal_error"
+              ]
+            },
+            "attempt_bucket": {
+              "type": "string",
+              "description": "Agrupación aproximada de intentos, sin IP.",
+              "enum": [
+                "1",
+                "2-5",
+                "6-10",
+                ">10"
+              ]
+            }
+          },
+          "required": [
+            "failure_code",
+            "attempt_bucket"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Inicio de sesión rechazado."
+    },
+    "session_expired": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "session_expired"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "route_template": {
+              "type": "string",
+              "description": "Ruta de acceso normalizada, sin parámetros.",
+              "maxLength": 160
+            },
+            "session_age_bucket": {
+              "type": "string",
+              "description": "Intervalo de antigüedad.",
+              "enum": [
+                "0-15m",
+                "15-30m",
+                "30-60m",
+                ">60m"
+              ]
+            }
+          },
+          "required": [
+            "route_template",
+            "session_age_bucket"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Sesión caducada o token expirado."
+    },
+    "auth_access_denied": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "auth_access_denied"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "route_template": {
+              "type": "string",
+              "description": "Ruta normalizada.",
+              "pattern": "^/[a-zA-Z0-9/_{}-]+$",
+              "maxLength": 160
+            },
+            "status_code": {
+              "type": "integer",
+              "description": "HTTP autorizado 401 o 403.",
+              "enum": [
+                401,
+                403
+              ]
+            },
+            "denial_code": {
+              "type": "string",
+              "description": "Causa segura.",
+              "enum": [
+                "missing_token",
+                "invalid_token",
+                "expired_token",
+                "forbidden"
+              ]
+            }
+          },
+          "required": [
+            "route_template",
+            "status_code",
+            "denial_code"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Acceso a ruta protegida denegado."
+    },
+    "api_latency_recorded": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "api_latency_recorded"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "route_template": {
+              "type": "string",
+              "description": "Plantilla sin IDs concretos ni query string.",
+              "maxLength": 160
+            },
+            "method": {
+              "type": "string",
+              "description": "Método HTTP.",
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ]
+            },
+            "status_family": {
+              "type": "string",
+              "description": "Familia de respuesta.",
+              "enum": [
+                "2xx",
+                "3xx",
+                "4xx",
+                "5xx"
+              ]
+            },
+            "duration_ms": {
+              "type": "number",
+              "description": "Latencia de servidor en ms.",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "route_template",
+            "method",
+            "status_family",
+            "duration_ms"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Medición agregable de latencia API."
+    },
+    "page_load_recorded": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "page_load_recorded"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "route_template": {
+              "type": "string",
+              "description": "Ruta permitida sin datos de usuario.",
+              "maxLength": 160
+            },
+            "load_ms": {
+              "type": "number",
+              "description": "Milisegundos hasta pantalla usable.",
+              "minimum": 0
+            },
+            "navigation_kind": {
+              "type": "string",
+              "description": "Navegación inicial o interna.",
+              "enum": [
+                "initial",
+                "client_transition"
+              ]
+            }
+          },
+          "required": [
+            "route_template",
+            "load_ms",
+            "navigation_kind"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Tiempo de carga de página en backoffice."
+    },
+    "database_query_slow_detected": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "database_query_slow_detected"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query_fingerprint": {
+              "type": "string",
+              "description": "Huella o nombre de consulta sin parámetros ni SQL bruto.",
+              "maxLength": 160
+            },
+            "duration_ms": {
+              "type": "number",
+              "description": "Tiempo de ejecución ms.",
+              "minimum": 500
+            },
+            "db_role": {
+              "type": "string",
+              "description": "Clase de base de datos.",
+              "enum": [
+                "inventory_sql",
+                "auth_tinydb"
+              ]
+            }
+          },
+          "required": [
+            "query_fingerprint",
+            "duration_ms",
+            "db_role"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Consulta persistente excede umbral de latencia."
+    },
+    "frontend_error_captured": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "frontend_error_captured"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "error_fingerprint": {
+              "type": "string",
+              "description": "Huella irreversible de tipo/módulo/stack saneado.",
+              "maxLength": 64,
+              "pattern": "^(window_error|unhandled_rejection|[a-f0-9]{64})$"
+            },
+            "route_template": {
+              "type": "string",
+              "description": "Ruta estable sin queries ni datos personales.",
+              "maxLength": 160
+            },
+            "severity": {
+              "type": "string",
+              "description": "Gravedad de fallo.",
+              "enum": [
+                "warning",
+                "error",
+                "fatal"
+              ]
+            }
+          },
+          "required": [
+            "error_fingerprint",
+            "route_template",
+            "severity"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Excepción no controlada del frontend."
+    },
+    "api_request_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "api_request_failed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "route_template": {
+              "type": "string",
+              "description": "Plantilla del endpoint.",
+              "maxLength": 160
+            },
+            "method": {
+              "type": "string",
+              "description": "HTTP verb.",
+              "enum": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE"
+              ]
+            },
+            "failure_kind": {
+              "type": "string",
+              "description": "Tipo seguro.",
+              "enum": [
+                "server_5xx",
+                "network",
+                "timeout",
+                "bad_gateway"
+              ]
+            },
+            "duration_ms": {
+              "type": "number",
+              "description": "Tiempo hasta error.",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "route_template",
+            "method",
+            "failure_kind",
+            "duration_ms"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Fallo HTTP inesperado en cliente."
+    },
+    "supplier_selection_changed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "supplier_selection_changed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "supplier_key": {
+              "type": "string",
+              "description": "ID normalizado de proveedor, no email de contacto.",
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "country": {
+              "type": "string",
+              "description": "Mercado de operación.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "product_category": {
+              "type": "string",
+              "description": "Categoría del ingrediente.",
+              "enum": [
+                "meat",
+                "produce",
+                "sauce",
+                "beverage",
+                "packaging",
+                "cleaning"
+              ]
+            }
+          },
+          "required": [
+            "supplier_key",
+            "country",
+            "product_category"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Elección de proveedor en una orden de entrada."
+    },
+    "inventory_country_switched": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inventory_country_switched"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "selected_country": {
+              "type": "string",
+              "description": "País elegido, no idioma UI.",
+              "enum": [
+                "CO",
+                "US"
+              ]
+            },
+            "result_count": {
+              "type": "integer",
+              "description": "Número de productos filtrados.",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "selected_country",
+            "result_count"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Operador cambia mercado CO/US en inventario."
+    },
+    "inventory_stock_warning_viewed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUIDv4 aleatorio, idempotencia/deduplicación."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC, e.g. 2026-11-04T11:00:00Z."
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ID aleatorio por sesión, null para tareas de sistema; nunca cookie o token.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Pseudónimo HMAC del TinyDB user UUID, null si no autenticado.",
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "event_type": {
+          "type": "string",
+          "const": "inventory_stock_warning_viewed"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "requestId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlación de solicitud cliente-backend (UUID generado si ausente)."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "product_id": {
+              "type": "integer",
+              "description": "Producto visible.",
+              "minimum": 1
+            },
+            "location_id": {
+              "type": "integer",
+              "description": "Local del stock observado.",
+              "minimum": 1,
+              "maximum": 14
+            },
+            "warning_level": {
+              "type": "string",
+              "description": "Severidad visual.",
+              "enum": [
+                "low",
+                "critical"
+              ]
+            }
+          },
+          "required": [
+            "product_id",
+            "location_id",
+            "warning_level"
+          ]
+        }
+      },
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "description": "Operador visualiza alerta de stock bajo en el listado."
+    }
+  }
+}
